@@ -1,0 +1,56 @@
+{
+  "name": "@trifle-labs/clawsino",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Clawsino provably fair dice game",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./abi": {
+      "import": "./dist/abi.mjs",
+      "require": "./dist/abi.js",
+      "types": "./dist/abi.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "deployments"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/abi.ts --format cjs,esm --dts --clean",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "peerDependencies": {
+    "viem": ">=2.0.0"
+  },
+  "keywords": [
+    "ethereum",
+    "dice",
+    "gambling",
+    "provably-fair",
+    "erc4626",
+    "staking"
+  ],
+  "author": "Trifle Labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trifle-labs/clawsino.git"
+  }
+}

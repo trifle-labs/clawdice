@@ -1,0 +1,254 @@
+export const ClawsinoABI = [
+  {
+    type: 'constructor',
+    inputs: [{ name: '_vault', type: 'address' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'placeBet',
+    inputs: [{ name: 'targetOddsE18', type: 'uint64' }],
+    outputs: [{ name: 'betId', type: 'uint256' }],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'claim',
+    inputs: [{ name: 'betId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'sweepExpired',
+    inputs: [{ name: 'maxCount', type: 'uint256' }],
+    outputs: [{ name: 'swept', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getBet',
+    inputs: [{ name: 'betId', type: 'uint256' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'player', type: 'address' },
+          { name: 'amount', type: 'uint128' },
+          { name: 'targetOddsE18', type: 'uint64' },
+          { name: 'blockNumber', type: 'uint64' },
+          { name: 'status', type: 'uint8' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getMaxBet',
+    inputs: [{ name: 'targetOddsE18', type: 'uint64' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'computeResult',
+    inputs: [{ name: 'betId', type: 'uint256' }],
+    outputs: [
+      { name: 'won', type: 'bool' },
+      { name: 'payout', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'houseEdgeE18',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'vault',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'nextBetId',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getPendingBetCount',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'setHouseEdge',
+    inputs: [{ name: 'newEdgeE18', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'owner',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'BetPlaced',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true },
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint128', indexed: false },
+      { name: 'targetOddsE18', type: 'uint64', indexed: false },
+      { name: 'blockNumber', type: 'uint64', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'BetResolved',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true },
+      { name: 'won', type: 'bool', indexed: false },
+      { name: 'payout', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'BetClaimed',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true },
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'payout', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'BetExpired',
+    inputs: [{ name: 'betId', type: 'uint256', indexed: true }],
+  },
+  {
+    type: 'event',
+    name: 'HouseEdgeUpdated',
+    inputs: [
+      { name: 'oldEdge', type: 'uint256', indexed: false },
+      { name: 'newEdge', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
+export const ClawsinoVaultABI = [
+  {
+    type: 'constructor',
+    inputs: [{ name: '_weth', type: 'address' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'stake',
+    inputs: [],
+    outputs: [{ name: 'shares', type: 'uint256' }],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'unstake',
+    inputs: [{ name: 'shares', type: 'uint256' }],
+    outputs: [{ name: 'assets', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'totalAssets',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'totalSupply',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'previewDeposit',
+    inputs: [{ name: 'assets', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'previewRedeem',
+    inputs: [{ name: 'shares', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'clawsino',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'setClawsino',
+    inputs: [{ name: '_clawsino', type: 'address' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'seedLiquidity',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'event',
+    name: 'Staked',
+    inputs: [
+      { name: 'staker', type: 'address', indexed: true },
+      { name: 'assets', type: 'uint256', indexed: false },
+      { name: 'shares', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'Unstaked',
+    inputs: [
+      { name: 'staker', type: 'address', indexed: true },
+      { name: 'shares', type: 'uint256', indexed: false },
+      { name: 'assets', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
+export const BetStatus = {
+  Pending: 0,
+  Won: 1,
+  Lost: 2,
+  Claimed: 3,
+  Expired: 4,
+} as const;
+
+export type BetStatusType = (typeof BetStatus)[keyof typeof BetStatus];
