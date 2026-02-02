@@ -1,13 +1,44 @@
 export const ClawsinoABI = [
   {
     type: 'constructor',
-    inputs: [{ name: '_vault', type: 'address' }],
+    inputs: [
+      { name: '_vault', type: 'address' },
+      { name: '_weth', type: 'address' },
+      { name: '_swapRouter', type: 'address' },
+    ],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
     name: 'placeBet',
-    inputs: [{ name: 'targetOddsE18', type: 'uint64' }],
+    inputs: [
+      { name: 'amount', type: 'uint256' },
+      { name: 'targetOddsE18', type: 'uint64' },
+    ],
+    outputs: [{ name: 'betId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'placeBetWithPermit',
+    inputs: [
+      { name: 'amount', type: 'uint256' },
+      { name: 'targetOddsE18', type: 'uint64' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'v', type: 'uint8' },
+      { name: 'r', type: 'bytes32' },
+      { name: 's', type: 'bytes32' },
+    ],
+    outputs: [{ name: 'betId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'placeBetWithETH',
+    inputs: [
+      { name: 'targetOddsE18', type: 'uint64' },
+      { name: 'minTokensOut', type: 'uint256' },
+    ],
     outputs: [{ name: 'betId', type: 'uint256' }],
     stateMutability: 'payable',
   },
@@ -77,6 +108,20 @@ export const ClawsinoABI = [
   },
   {
     type: 'function',
+    name: 'collateralToken',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'poolFee',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint24' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'nextBetId',
     inputs: [],
     outputs: [{ name: '', type: 'uint256' }],
@@ -93,6 +138,13 @@ export const ClawsinoABI = [
     type: 'function',
     name: 'setHouseEdge',
     inputs: [{ name: 'newEdgeE18', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setPoolFee',
+    inputs: [{ name: '_poolFee', type: 'uint24' }],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -145,18 +197,52 @@ export const ClawsinoABI = [
       { name: 'newEdge', type: 'uint256', indexed: false },
     ],
   },
+  {
+    type: 'event',
+    name: 'PoolFeeUpdated',
+    inputs: [
+      { name: 'oldFee', type: 'uint24', indexed: false },
+      { name: 'newFee', type: 'uint24', indexed: false },
+    ],
+  },
 ] as const;
 
 export const ClawsinoVaultABI = [
   {
     type: 'constructor',
-    inputs: [{ name: '_weth', type: 'address' }],
+    inputs: [
+      { name: '_collateralToken', type: 'address' },
+      { name: '_weth', type: 'address' },
+      { name: '_swapRouter', type: 'address' },
+      { name: '_name', type: 'string' },
+      { name: '_symbol', type: 'string' },
+    ],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
     name: 'stake',
-    inputs: [],
+    inputs: [{ name: 'assets', type: 'uint256' }],
+    outputs: [{ name: 'shares', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'stakeWithPermit',
+    inputs: [
+      { name: 'assets', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'v', type: 'uint8' },
+      { name: 'r', type: 'bytes32' },
+      { name: 's', type: 'bytes32' },
+    ],
+    outputs: [{ name: 'shares', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'stakeWithETH',
+    inputs: [{ name: 'minTokensOut', type: 'uint256' }],
     outputs: [{ name: 'shares', type: 'uint256' }],
     stateMutability: 'payable',
   },
@@ -204,6 +290,20 @@ export const ClawsinoVaultABI = [
   },
   {
     type: 'function',
+    name: 'collateralToken',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'poolFee',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint24' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'clawsino',
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
@@ -218,10 +318,17 @@ export const ClawsinoVaultABI = [
   },
   {
     type: 'function',
-    name: 'seedLiquidity',
-    inputs: [],
+    name: 'setPoolFee',
+    inputs: [{ name: '_poolFee', type: 'uint24' }],
     outputs: [],
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'seedLiquidity',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'event',
@@ -240,6 +347,66 @@ export const ClawsinoVaultABI = [
       { name: 'shares', type: 'uint256', indexed: false },
       { name: 'assets', type: 'uint256', indexed: false },
     ],
+  },
+  {
+    type: 'event',
+    name: 'PoolFeeUpdated',
+    inputs: [
+      { name: 'oldFee', type: 'uint24', indexed: false },
+      { name: 'newFee', type: 'uint24', indexed: false },
+    ],
+  },
+] as const;
+
+// Standard ERC20 ABI for token approvals
+export const ERC20ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'allowance',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'decimals',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'symbol',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'name',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
   },
 ] as const;
 

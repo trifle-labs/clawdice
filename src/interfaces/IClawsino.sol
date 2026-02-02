@@ -26,7 +26,17 @@ interface IClawsino {
     event BetExpired(uint256 indexed betId);
     event HouseEdgeUpdated(uint256 oldEdge, uint256 newEdge);
 
-    function placeBet(uint64 targetOddsE18) external payable returns (uint256 betId);
+    /// @notice Place a bet with collateral tokens directly
+    function placeBet(uint256 amount, uint64 targetOddsE18) external returns (uint256 betId);
+
+    /// @notice Place a bet using ERC20 permit (gasless approval)
+    function placeBetWithPermit(uint256 amount, uint64 targetOddsE18, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        returns (uint256 betId);
+
+    /// @notice Place a bet with ETH - swaps to collateral token via Uniswap
+    function placeBetWithETH(uint64 targetOddsE18, uint256 minTokensOut) external payable returns (uint256 betId);
+
     function claim(uint256 betId) external;
     function sweepExpired(uint256 maxCount) external returns (uint256 swept);
 

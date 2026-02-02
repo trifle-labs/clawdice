@@ -3,31 +3,42 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-/// @title WETH9 Minimal Interface
-interface IWETH {
-    function deposit() external payable;
-    function withdraw(uint256) external;
-    function balanceOf(address) external view returns (uint256);
-    function transfer(address, uint256) external returns (bool);
-    function approve(address, uint256) external returns (bool);
-}
+import "./interfaces/ISwapRouter.sol";
 
 /// @title ClawsinoVault
-/// @notice ERC-4626 vault for Clawsino staking, using native ETH
-/// @dev Wraps ETH to WETH for ERC-4626 compatibility
+/// @notice ERC-4626 vault for Clawsino staking using any ERC20 token as collateral
+/// @dev Supports Uniswap swaps for ETH deposits and ERC20 permit for gasless approvals
 contract ClawsinoVault is ERC4626, Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     address public clawsino;
+    IERC20 public immutable collateralToken;
     IWETH public immutable weth;
+    ISwapRouter public immutable swapRouter;
+    uint24 public poolFee = 10000; // 1% fee tier (Clanker default)
 
     event ClawsinoSet(address indexed clawsino);
     event Staked(address indexed staker, uint256 assets, uint256 shares);
     event Unstaked(address indexed staker, uint256 shares, uint256 assets);
+    event PoolFeeUpdated(uint24 oldFee, uint24 newFee);
 
-    constructor(address _weth) ERC4626(IERC20(_weth)) ERC20("Clawsino Staked ETH", "clawETH") Ownable(msg.sender) {
+    constructor(
+        address _collateralToken,
+        address _weth,
+        address _swapRouter,
+        string memory _name,
+        string memory _symbol
+    ) ERC4626(IERC20(_collateralToken)) ERC20(_name, _symbol) Ownable(msg.sender) {
+        collateralToken = IERC20(_collateralToken);
         weth = IWETH(_weth);
+        swapRouter = ISwapRouter(_swapRouter);
+
+        // Approve router for WETH swaps
+        IERC20(_weth).approve(_swapRouter, type(uint256).max);
     }
 
     /// @notice Set the Clawsino contract address (one-time)
@@ -38,21 +49,89 @@ contract ClawsinoVault is ERC4626, Ownable, ReentrancyGuard {
         emit ClawsinoSet(_clawsino);
     }
 
-    /// @notice Stake ETH and receive clawETH shares
-    function stake() external payable nonReentrant returns (uint256 shares) {
-        require(msg.value > 0, "No ETH sent");
+    /// @notice Update pool fee tier for swaps
+    function setPoolFee(uint24 _poolFee) external onlyOwner {
+        uint24 oldFee = poolFee;
+        poolFee = _poolFee;
+        emit PoolFeeUpdated(oldFee, _poolFee);
+    }
 
-        // Calculate shares BEFORE depositing (so totalAssets doesn't include new deposit)
-        shares = _convertToShares(msg.value);
+    /// @notice Stake tokens directly and receive vault shares
+    /// @param assets Amount of collateral tokens to stake
+    function stake(uint256 assets) external nonReentrant returns (uint256 shares) {
+        require(assets > 0, "Zero assets");
+
+        // Calculate shares BEFORE transfer
+        shares = _convertToShares(assets);
         require(shares > 0, "Zero shares");
 
-        // Wrap ETH to WETH
-        weth.deposit{ value: msg.value }();
+        // Transfer tokens from sender
+        collateralToken.safeTransferFrom(msg.sender, address(this), assets);
 
         // Mint shares to sender
         _mint(msg.sender, shares);
 
-        emit Staked(msg.sender, msg.value, shares);
+        emit Staked(msg.sender, assets, shares);
+    }
+
+    /// @notice Stake tokens using ERC20 permit (gasless approval)
+    /// @param assets Amount of collateral tokens to stake
+    /// @param deadline Permit deadline
+    /// @param v Permit signature v
+    /// @param r Permit signature r
+    /// @param s Permit signature s
+    function stakeWithPermit(uint256 assets, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        nonReentrant
+        returns (uint256 shares)
+    {
+        require(assets > 0, "Zero assets");
+
+        // Execute permit
+        IERC20Permit(address(collateralToken)).permit(msg.sender, address(this), assets, deadline, v, r, s);
+
+        // Calculate shares BEFORE transfer
+        shares = _convertToShares(assets);
+        require(shares > 0, "Zero shares");
+
+        // Transfer tokens from sender
+        collateralToken.safeTransferFrom(msg.sender, address(this), assets);
+
+        // Mint shares to sender
+        _mint(msg.sender, shares);
+
+        emit Staked(msg.sender, assets, shares);
+    }
+
+    /// @notice Stake with ETH - swaps to collateral token via Uniswap
+    /// @param minTokensOut Minimum tokens to receive from swap (slippage protection)
+    function stakeWithETH(uint256 minTokensOut) external payable nonReentrant returns (uint256 shares) {
+        require(msg.value > 0, "No ETH sent");
+
+        // Wrap ETH to WETH
+        weth.deposit{ value: msg.value }();
+
+        // Swap WETH -> collateral token
+        uint256 tokensReceived = swapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(weth),
+                tokenOut: address(collateralToken),
+                fee: poolFee,
+                recipient: address(this),
+                amountIn: msg.value,
+                amountOutMinimum: minTokensOut,
+                sqrtPriceLimitX96: 0
+            })
+        );
+
+        // Calculate shares
+        shares = _convertToShares(tokensReceived);
+        require(shares > 0, "Zero shares");
+
+        // Mint shares to sender
+        _mint(msg.sender, shares);
+
+        emit Staked(msg.sender, tokensReceived, shares);
     }
 
     /// @notice Convert assets to shares, handling zero supply case
@@ -73,7 +152,7 @@ contract ClawsinoVault is ERC4626, Ownable, ReentrancyGuard {
         return (shares * totalAssets()) / supply;
     }
 
-    /// @notice Unstake by burning shares and receiving ETH
+    /// @notice Unstake by burning shares and receiving collateral tokens
     function unstake(uint256 shares) external nonReentrant returns (uint256 assets) {
         require(shares > 0, "Zero shares");
         require(balanceOf(msg.sender) >= shares, "Insufficient shares");
@@ -82,68 +161,63 @@ contract ClawsinoVault is ERC4626, Ownable, ReentrancyGuard {
         assets = _convertToAssets(shares);
         require(assets > 0, "Zero assets");
 
-        // Check we have enough WETH
-        require(weth.balanceOf(address(this)) >= assets, "Insufficient liquidity");
+        // Check we have enough tokens
+        require(collateralToken.balanceOf(address(this)) >= assets, "Insufficient liquidity");
 
         // Burn shares
         _burn(msg.sender, shares);
 
-        // Unwrap WETH and send ETH
-        weth.withdraw(assets);
-        (bool success,) = msg.sender.call{ value: assets }("");
-        require(success, "ETH transfer failed");
+        // Transfer tokens
+        collateralToken.safeTransfer(msg.sender, assets);
 
         emit Unstaked(msg.sender, shares, assets);
     }
 
-    /// @notice Get total assets (WETH balance)
+    /// @notice Get total assets (collateral token balance)
     function totalAssets() public view override returns (uint256) {
-        return weth.balanceOf(address(this));
+        return collateralToken.balanceOf(address(this));
     }
 
-    /// @notice Handle incoming ETH from Clawsino (bet losses) or WETH (unwrap)
-    receive() external payable {
-        // Accept from WETH (for withdraw) or Clawsino (for bet losses)
-        if (msg.sender == address(weth)) {
-            // ETH from WETH unwrap, do nothing (will be sent to user)
-            return;
-        }
-        require(msg.sender == clawsino, "Only Clawsino or WETH");
-        // Wrap incoming ETH to WETH
-        weth.deposit{ value: msg.value }();
+    /// @notice Receive tokens from Clawsino (bet losses)
+    function receiveFromClawsino(uint256 amount) external {
+        require(msg.sender == clawsino, "Only Clawsino");
+        // Tokens are already transferred via safeTransfer before this call
+        // This function is just for event tracking if needed
     }
 
-    /// @notice Withdraw ETH to pay Clawsino winners
-    /// @param amount Amount of ETH to withdraw
+    /// @notice Withdraw tokens to pay Clawsino winners
+    /// @param amount Amount of tokens to withdraw
     function withdrawForPayout(uint256 amount) external nonReentrant {
         require(msg.sender == clawsino, "Only Clawsino");
-        require(weth.balanceOf(address(this)) >= amount, "Insufficient funds");
+        require(collateralToken.balanceOf(address(this)) >= amount, "Insufficient funds");
 
-        weth.withdraw(amount);
-        (bool success,) = clawsino.call{ value: amount }("");
-        require(success, "Transfer failed");
+        collateralToken.safeTransfer(clawsino, amount);
     }
 
     /// @notice Seed initial liquidity (owner only, for initial setup)
-    function seedLiquidity() external payable onlyOwner {
-        require(msg.value > 0, "No ETH");
-        weth.deposit{ value: msg.value }();
-        // Mint shares to owner
-        uint256 shares = msg.value; // 1:1 for initial deposit
+    function seedLiquidity(uint256 amount) external onlyOwner {
+        require(amount > 0, "Zero amount");
+
+        collateralToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        // Mint shares to owner (1:1 for initial deposit)
+        uint256 shares = amount;
         _mint(msg.sender, shares);
-        emit Staked(msg.sender, msg.value, shares);
+
+        emit Staked(msg.sender, amount, shares);
     }
 
-    /// @notice Emergency withdraw all WETH as ETH (owner only)
+    /// @notice Emergency withdraw all tokens (owner only)
     function emergencyWithdraw() external onlyOwner {
-        uint256 balance = weth.balanceOf(address(this));
+        uint256 balance = collateralToken.balanceOf(address(this));
         if (balance > 0) {
-            weth.withdraw(balance);
-            (bool success,) = owner().call{ value: balance }("");
-            require(success, "Transfer failed");
+            collateralToken.safeTransfer(owner(), balance);
         }
     }
 
-    // Standard ERC-4626 deposit/withdraw use WETH directly
-    // Users should use stake()/unstake() for ETH interactions
+    /// @notice Refund any ETH sent directly (shouldn't happen but safety net)
+    receive() external payable {
+        // Only accept ETH from WETH unwrap
+        require(msg.sender == address(weth), "Use stakeWithETH");
+    }
 }
