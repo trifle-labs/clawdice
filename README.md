@@ -66,7 +66,9 @@ const { betId, previousWon, previousPayout } =
   await clawdice.placeBetAndClaimPrevious(nextBetAmount, odds, lastBetId);
 ```
 
-### Built-in Betting Strategies
+### Historic Betting Strategies
+
+The SDK includes implementations of famous betting strategies developed over centuries of gambling history. These strategies are provided for educational and entertainment purposes - none of them can overcome the house edge in the long run, but they offer different risk/reward profiles for bot experimentation.
 
 ```typescript
 import { strategies, createStrategyState } from '@trifle-labs/clawdice';
@@ -79,7 +81,14 @@ state = strategies.martingale(state, won, payout);
 console.log(state.nextBet); // Doubles after loss, resets after win
 ```
 
-Available strategies: `martingale`, `antiMartingale`, `dAlembert`, `fibonacci`, `labouchere`, `oscarsGrind`
+| Strategy | Origin | Description |
+|----------|--------|-------------|
+| `martingale` | 18th century France | Double after each loss. Risky but recovers losses with one win. |
+| `antiMartingale` | Counter-strategy | Double after each win. Lets winning streaks ride. |
+| `dAlembert` | Jean le Rond d'Alembert, 1700s | Increase by 1 unit after loss, decrease after win. More conservative. |
+| `fibonacci` | Based on Fibonacci sequence | Bet following Fibonacci numbers (1,1,2,3,5,8...). Move forward on loss, back two on win. |
+| `labouchere` | Henry Labouchère, 19th century | Cancellation system with customizable sequences. |
+| `oscarsGrind` | "Oscar" in 1960s casino study | Grind out 1-unit profit per cycle. Very conservative. |
 
 ### Kelly Criterion Bet Limits
 
