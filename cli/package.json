@@ -1,16 +1,16 @@
 {
-  "name": "@trifle-labs/clawsino-cli",
+  "name": "@trifle-labs/clawdice-cli",
   "version": "0.1.0",
-  "description": "CLI for interacting with Clawsino",
+  "description": "CLI for interacting with Clawdice",
   "bin": {
-    "clawsino": "./dist/cli.js"
+    "clawdice": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsup src/cli.ts --format cjs --clean",
     "start": "node dist/cli.js"
   },
   "dependencies": {
-    "@trifle-labs/clawsino": "file:../sdk",
+    "@trifle-labs/clawdice": "file:../sdk",
     "commander": "^12.1.0",
     "viem": "^2.21.0"
   },

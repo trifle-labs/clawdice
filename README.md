@@ -1,10 +1,10 @@
-# Clawsino
+# Clawdice
 
 Provably fair on-chain dice game with ERC-4626 staking vault, powered by Clanker tokens.
 
 ## Overview
 
-Clawsino is a Satoshi Dice-style betting protocol where:
+Clawdice is a Satoshi Dice-style betting protocol where:
 - Players bet with any ERC20 token (designed for Clanker tokens on Base)
 - Randomness derived from future block hash (commit-reveal pattern)
 - House bank powered by LP stakers via ERC-4626 vault
@@ -18,7 +18,7 @@ Clawsino is a Satoshi Dice-style betting protocol where:
 ### Betting
 
 **Option 1: Bet with Tokens**
-1. Approve tokens: `token.approve(clawsino, amount)`
+1. Approve tokens: `token.approve(clawdice, amount)`
 2. Place bet: `placeBet(amount, odds)`
 3. Claim: `claim(betId)` after next block
 
@@ -109,33 +109,33 @@ vault.unstake(shares);
 ## Clanker Token Integration
 
 This contract is designed to work with Clanker tokens on Base:
-- Clanker tokens are deployed via [@clanker](https://clanker.world)
-- Each Clanker token has a Uniswap V3 pool (1% fee tier)
+- Clanker tokens are deployed via [@clanker](https://clanker.world) or [Bankr](https://bankr.xyz)
+- Clanker v4 tokens use Uniswap V4 pools with Hooks
 - The vault token represents staked Clanker tokens
 
 ### Deployment for a Clanker Token
 
-1. Deploy ClawsinoVault with your Clanker token address
-2. Deploy Clawsino pointing to the vault
-3. Call `vault.setClawsino(clawsinoAddress)`
+1. Deploy ClawdiceVault with your Clanker token address
+2. Deploy Clawdice pointing to the vault
+3. Call `vault.setClawdice(clawdiceAddress)`
 4. Seed initial liquidity via `vault.seedLiquidity(amount)`
 
 ## Contracts
 
 | Contract | Description |
 |----------|-------------|
-| `Clawsino.sol` | Main game logic, betting, claims, Uniswap integration |
-| `ClawsinoVault.sol` | ERC-4626 staking vault for collateral tokens |
+| `Clawdice.sol` | Main game logic, betting, claims, Uniswap V4 integration |
+| `ClawdiceVault.sol` | ERC-4626 staking vault for collateral tokens |
 | `BetMath.sol` | Payout calculations, randomness |
 | `KellyCriterion.sol` | Max bet calculations |
-| `ISwapRouter.sol` | Uniswap V3 SwapRouter interface |
+| `IUniswapV4.sol` | Uniswap V4 Universal Router interface |
 
 ## Installation
 
 ```bash
 # Clone
-git clone https://github.com/trifle-labs/clawsino
-cd clawsino
+git clone https://github.com/trifle-labs/clawdice
+cd clawdice
 
 # Install dependencies
 forge install
@@ -150,78 +150,78 @@ forge test
 ## SDK
 
 ```bash
-npm install @trifle-labs/clawsino
+npm install @trifle-labs/clawdice
 ```
 
 ```typescript
-import { Clawsino } from '@trifle-labs/clawsino';
+import { Clawdice } from '@trifle-labs/clawdice';
 import { base } from 'viem/chains';
 
-const clawsino = new Clawsino({
+const clawdice = new Clawdice({
   chain: base,
-  clawsinoAddress: '0x...',
+  clawdiceAddress: '0x...',
   vaultAddress: '0x...',
   tokenAddress: '0x...',  // Clanker token
   account: privateKeyToAccount(key),
 });
 
 // Option 1: Bet with tokens (requires approval)
-await clawsino.approveTokens(parseEther('100'));
-const { betId } = await clawsino.placeBet({
+await clawdice.approveTokens(parseEther('100'));
+const { betId } = await clawdice.placeBet({
   amount: parseEther('100'),
   odds: 0.5
 });
 
 // Option 2: Bet with ETH (single transaction)
-const { betId } = await clawsino.placeBetWithETH({
+const { betId } = await clawdice.placeBetWithETH({
   ethAmount: parseEther('0.1'),
   odds: 0.5,
   minTokensOut: parseEther('90')  // slippage protection
 });
 
 // Check result after next block
-const result = await clawsino.computeResult(betId);
+const result = await clawdice.computeResult(betId);
 if (result.won) {
-  await clawsino.claim(betId);
+  await clawdice.claim(betId);
 }
 
 // Stake with tokens
-await clawsino.vault.approveTokens(parseEther('1000'));
-await clawsino.vault.stake(parseEther('1000'));
+await clawdice.vault.approveTokens(parseEther('1000'));
+await clawdice.vault.stake(parseEther('1000'));
 
 // Or stake with ETH (single transaction)
-await clawsino.vault.stakeWithETH('1', 0n); // 1 ETH
+await clawdice.vault.stakeWithETH('1', 0n); // 1 ETH
 ```
 
 ## CLI
 
 ```bash
 # Install
-npm install -g @trifle-labs/clawsino-cli
+npm install -g @trifle-labs/clawdice-cli
 
 # Place bet with tokens
-clawsino bet 100 0.5  # 100 tokens at 50% odds
+clawdice bet 100 0.5  # 100 tokens at 50% odds
 
 # Place bet with ETH
-clawsino bet-eth 0.1 0.5  # 0.1 ETH at 50% odds
+clawdice bet-eth 0.1 0.5  # 0.1 ETH at 50% odds
 
 # Check status
-clawsino status 123
+clawdice status 123
 
 # Claim winnings
-clawsino claim 123
+clawdice claim 123
 
 # Stake tokens
-clawsino stake 1000
+clawdice stake 1000
 
 # Stake with ETH
-clawsino stake-eth 1.0
+clawdice stake-eth 1.0
 
 # Check balance
-clawsino balance
+clawdice balance
 
 # Contract info
-clawsino info
+clawdice info
 ```
 
 ## Network Addresses
@@ -231,18 +231,20 @@ clawsino info
 | Contract | Address |
 |----------|---------|
 | WETH | `0x4200000000000000000000000000000000000006` |
-| SwapRouter02 | `0x2626664c2603336E57B271c5C0b26F421741e481` |
-| Clawsino | TBD |
-| ClawsinoVault | TBD |
+| Universal Router (V4) | `0x6ff5693b99212da76ad316178a184ab56d299b43` |
+| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
+| Clawdice | TBD |
+| ClawdiceVault | TBD |
 
 ### Mainnet
 
 | Contract | Address |
 |----------|---------|
 | WETH | `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` |
-| SwapRouter02 | `0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45` |
-| Clawsino | TBD |
-| ClawsinoVault | TBD |
+| Universal Router (V4) | `0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af` |
+| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
+| Clawdice | TBD |
+| ClawdiceVault | TBD |
 
 ## Security
 
@@ -266,7 +268,7 @@ MIT
 ## Links
 
 - [Specification](./SPEC.md)
-- [Agent Skill](./skills/clawsino/SKILL.md)
+- [Agent Skill](./skills/clawdice/SKILL.md)
 - [ERC-4626 Standard](https://eips.ethereum.org/EIPS/eip-4626)
 - [Clanker](https://clanker.world)
-- [Uniswap V3 Base Deployments](https://docs.uniswap.org/contracts/v3/reference/deployments/base-deployments)
+- [Uniswap V4 Deployments](https://docs.uniswap.org/contracts/v4/deployments)

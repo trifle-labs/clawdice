@@ -1,10 +1,10 @@
-# Clawsino: Provably Fair On-Chain Dice
+# Clawdice: Provably Fair On-Chain Dice
 
 A commit-reveal dice game inspired by Satoshi Dice / Just Dice with staking pool mechanics.
 
 ## Overview
 
-Clawsino is a provably fair gambling protocol where:
+Clawdice is a provably fair gambling protocol where:
 - Players bet ETH with customizable odds (e.g., 50% chance to 2x)
 - Randomness derived from future block hash (commit-reveal pattern)
 - House bank accepts stakes from LPs who share in profits/losses
@@ -118,17 +118,17 @@ Example:
 
 ```
 contracts/
-├── Clawsino.sol           # Main game logic
-├── ClawsinoVault.sol      # ERC-4626 staking vault
+├── Clawdice.sol           # Main game logic
+├── ClawdiceVault.sol      # ERC-4626 staking vault
 ├── interfaces/
-│   ├── IClawsino.sol
-│   └── IClawsinoVault.sol
+│   ├── IClawdice.sol
+│   └── IClawdiceVault.sol
 └── libraries/
     ├── BetMath.sol        # Odds & payout calculations
     └── KellyCriterion.sol # Max bet calculations
 ```
 
-### Clawsino.sol
+### Clawdice.sol
 
 ```solidity
 struct Bet {
@@ -155,11 +155,11 @@ function computeResult(uint256 betId) external view returns (bool won, uint256 p
 function setHouseEdge(uint256 newEdgeE18) external onlyOwner;
 ```
 
-### ClawsinoVault.sol
+### ClawdiceVault.sol
 
 Extends OpenZeppelin's ERC-4626 with:
 - Native ETH deposits (wrapped to WETH internally, or native handling)
-- Integration with Clawsino for balance changes
+- Integration with Clawdice for balance changes
 - Events for staking analytics
 
 ## Security Considerations
@@ -187,63 +187,63 @@ Extends OpenZeppelin's ERC-4626 with:
 ## TypeScript SDK
 
 ```typescript
-import { Clawsino } from '@trifle-labs/clawsino';
+import { Clawdice } from '@trifle-labs/clawdice';
 
-const clawsino = new Clawsino({
+const clawdice = new Clawdice({
   rpcUrl: 'https://eth.drpc.org',
   contractAddress: '0x...',
   privateKey: process.env.PRIVATE_KEY  // optional for read-only
 });
 
 // Place bet
-const betId = await clawsino.placeBet({
+const betId = await clawdice.placeBet({
   amount: parseEther('0.1'),
   odds: 0.5  // 50% chance to 2x
 });
 
 // Check result (after next block)
-const result = await clawsino.getResult(betId);
+const result = await clawdice.getResult(betId);
 if (result.won) {
-  await clawsino.claim(betId);
+  await clawdice.claim(betId);
 }
 
 // Stake in vault
-await clawsino.vault.deposit(parseEther('1'));
-const myShares = await clawsino.vault.balanceOf(address);
+await clawdice.vault.deposit(parseEther('1'));
+const myShares = await clawdice.vault.balanceOf(address);
 ```
 
 ## CLI
 
 ```bash
 # Place a bet
-clawsino bet --amount 0.1 --odds 0.5
+clawdice bet --amount 0.1 --odds 0.5
 
 # Check bet status
-clawsino status <betId>
+clawdice status <betId>
 
 # Claim winnings
-clawsino claim <betId>
+clawdice claim <betId>
 
 # Stake ETH
-clawsino stake 1.0
+clawdice stake 1.0
 
 # Check stake value
-clawsino balance
+clawdice balance
 
 # Withdraw stake
-clawsino withdraw --shares 100
+clawdice withdraw --shares 100
 ```
 
 ## Agent Skill
 
-The `clawsino` skill allows agents to:
+The `clawdice` skill allows agents to:
 - Query current max bet for given odds
 - Place bets with safety checks
 - Monitor pending bets
 - Claim winnings automatically
 - Stake/unstake from vault
 
-See `skills/clawsino/SKILL.md` for full documentation.
+See `skills/clawdice/SKILL.md` for full documentation.
 
 ## Development
 
@@ -267,7 +267,7 @@ npm test
 
 ## Deployments
 
-| Network | Clawsino | ClawsinoVault |
+| Network | Clawdice | ClawdiceVault |
 |---------|----------|---------------|
 | Mainnet | TBD      | TBD           |
 | Sepolia | TBD      | TBD           |

@@ -1,10 +1,22 @@
-export const ClawsinoABI = [
+export const ClawdiceABI = [
   {
     type: 'constructor',
     inputs: [
       { name: '_vault', type: 'address' },
       { name: '_weth', type: 'address' },
-      { name: '_swapRouter', type: 'address' },
+      { name: '_universalRouter', type: 'address' },
+      { name: '_permit2', type: 'address' },
+      {
+        name: '_poolKey',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -115,9 +127,21 @@ export const ClawsinoABI = [
   },
   {
     type: 'function',
-    name: 'poolFee',
+    name: 'poolKey',
     inputs: [],
-    outputs: [{ name: '', type: 'uint24' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+    ],
     stateMutability: 'view',
   },
   {
@@ -143,8 +167,20 @@ export const ClawsinoABI = [
   },
   {
     type: 'function',
-    name: 'setPoolFee',
-    inputs: [{ name: '_poolFee', type: 'uint24' }],
+    name: 'setPoolKey',
+    inputs: [
+      {
+        name: '_poolKey',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -199,21 +235,55 @@ export const ClawsinoABI = [
   },
   {
     type: 'event',
-    name: 'PoolFeeUpdated',
+    name: 'PoolKeyUpdated',
     inputs: [
-      { name: 'oldFee', type: 'uint24', indexed: false },
-      { name: 'newFee', type: 'uint24', indexed: false },
+      {
+        name: 'oldKey',
+        type: 'tuple',
+        indexed: false,
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+      {
+        name: 'newKey',
+        type: 'tuple',
+        indexed: false,
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
     ],
   },
 ] as const;
 
-export const ClawsinoVaultABI = [
+export const ClawdiceVaultABI = [
   {
     type: 'constructor',
     inputs: [
       { name: '_collateralToken', type: 'address' },
       { name: '_weth', type: 'address' },
-      { name: '_swapRouter', type: 'address' },
+      { name: '_universalRouter', type: 'address' },
+      { name: '_permit2', type: 'address' },
+      {
+        name: '_poolKey',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
       { name: '_name', type: 'string' },
       { name: '_symbol', type: 'string' },
     ],
@@ -297,29 +367,53 @@ export const ClawsinoVaultABI = [
   },
   {
     type: 'function',
-    name: 'poolFee',
+    name: 'poolKey',
     inputs: [],
-    outputs: [{ name: '', type: 'uint24' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+    ],
     stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'clawsino',
+    name: 'clawdice',
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
     stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'setClawsino',
-    inputs: [{ name: '_clawsino', type: 'address' }],
+    name: 'setClawdice',
+    inputs: [{ name: '_clawdice', type: 'address' }],
     outputs: [],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
-    name: 'setPoolFee',
-    inputs: [{ name: '_poolFee', type: 'uint24' }],
+    name: 'setPoolKey',
+    inputs: [
+      {
+        name: '_poolKey',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -350,10 +444,32 @@ export const ClawsinoVaultABI = [
   },
   {
     type: 'event',
-    name: 'PoolFeeUpdated',
+    name: 'PoolKeyUpdated',
     inputs: [
-      { name: 'oldFee', type: 'uint24', indexed: false },
-      { name: 'newFee', type: 'uint24', indexed: false },
+      {
+        name: 'oldKey',
+        type: 'tuple',
+        indexed: false,
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+      {
+        name: 'newKey',
+        type: 'tuple',
+        indexed: false,
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
     ],
   },
 ] as const;

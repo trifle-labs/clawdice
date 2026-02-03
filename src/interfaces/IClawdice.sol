@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-interface IClawsino {
+interface IClawdice {
     enum BetStatus {
         Pending,
         Won,
@@ -36,6 +36,11 @@ interface IClawsino {
 
     /// @notice Place a bet with ETH - swaps to collateral token via Uniswap
     function placeBetWithETH(uint64 targetOddsE18, uint256 minTokensOut) external payable returns (uint256 betId);
+
+    /// @notice Place a new bet and claim a previous bet in one transaction
+    function placeBetAndClaimPrevious(uint256 amount, uint64 targetOddsE18, uint256 previousBetId)
+        external
+        returns (uint256 betId, bool previousWon, uint256 previousPayout);
 
     function claim(uint256 betId) external;
     function sweepExpired(uint256 maxCount) external returns (uint256 swept);

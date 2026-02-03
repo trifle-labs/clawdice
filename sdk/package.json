@@ -1,7 +1,7 @@
 {
-  "name": "@trifle-labs/clawsino",
+  "name": "@trifle-labs/clawdice",
   "version": "0.1.0",
-  "description": "TypeScript SDK for Clawsino provably fair dice game",
+  "description": "TypeScript SDK for Clawdice provably fair dice game",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -51,6 +51,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/trifle-labs/clawsino.git"
+    "url": "https://github.com/trifle-labs/clawdice.git"
   }
 }

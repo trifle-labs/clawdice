@@ -6,35 +6,38 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import "./interfaces/IClawsino.sol";
-import "./interfaces/ISwapRouter.sol";
+import "./interfaces/IClawdice.sol";
+import "./interfaces/IUniswapV4.sol";
 import "./libraries/BetMath.sol";
 import "./libraries/KellyCriterion.sol";
 
-interface IClawsinoVault {
+interface IClawdiceVault {
     function totalAssets() external view returns (uint256);
     function withdrawForPayout(uint256 amount) external;
     function collateralToken() external view returns (IERC20);
 }
 
-/// @title Clawsino
+/// @title Clawdice
 /// @notice Provably fair on-chain dice game with commit-reveal pattern
 /// @dev Uses future blockhash for randomness, Kelly Criterion for bet limits
-/// @dev Accepts any ERC20 token as collateral (designed for Clanker tokens)
-contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
+/// @dev Accepts any ERC20 token as collateral (designed for Clanker tokens on Uniswap V4)
+contract Clawdice is IClawdice, ReentrancyGuard, Ownable {
     using BetMath for *;
     using KellyCriterion for *;
     using SafeERC20 for IERC20;
 
     uint256 public constant MIN_BET = 1e15; // 0.001 tokens (assuming 18 decimals)
-    uint256 public constant EXPIRY_BLOCKS = 300; // ~1 hour on mainnet
-    uint256 public constant BLOCKHASH_LOOKBACK = 256;
+    uint256 public constant EXPIRY_BLOCKS = 255; // ~8.5 min on Base (2s blocks), ~51 min on mainnet (12s blocks)
+    uint256 public constant BLOCKHASH_LOOKBACK = 256; // EVM limit - blockhash only available for 256 blocks
 
     address public immutable vault;
     IERC20 public immutable collateralToken;
     IWETH public immutable weth;
-    ISwapRouter public immutable swapRouter;
-    uint24 public poolFee = 10000; // 1% fee tier (Clanker default)
+    IUniversalRouter public immutable universalRouter;
+    IPermit2 public immutable permit2;
+
+    // Uniswap V4 pool configuration
+    PoolKey public poolKey;
     uint256 public houseEdgeE18 = 0.01e18; // 1% default
 
     uint256 public nextBetId = 1;
@@ -44,24 +47,34 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
     uint256[] public pendingBetIds;
     mapping(uint256 => uint256) public pendingBetIndex; // betId -> index in pendingBetIds + 1 (0 means not in queue)
 
-    event PoolFeeUpdated(uint24 oldFee, uint24 newFee);
+    event PoolKeyUpdated(PoolKey oldKey, PoolKey newKey);
 
-    constructor(address _vault, address _weth, address _swapRouter) Ownable(msg.sender) {
+    constructor(
+        address _vault,
+        address _weth,
+        address _universalRouter,
+        address _permit2,
+        PoolKey memory _poolKey
+    ) Ownable(msg.sender) {
         require(_vault != address(0), "Invalid vault");
         vault = _vault;
-        collateralToken = IClawsinoVault(_vault).collateralToken();
+        collateralToken = IClawdiceVault(_vault).collateralToken();
         weth = IWETH(_weth);
-        swapRouter = ISwapRouter(_swapRouter);
+        universalRouter = IUniversalRouter(_universalRouter);
+        permit2 = IPermit2(_permit2);
+        poolKey = _poolKey;
 
-        // Approve router for WETH swaps
-        IERC20(_weth).approve(_swapRouter, type(uint256).max);
+        // Approve Permit2 for WETH (Universal Router uses Permit2)
+        IERC20(_weth).approve(_permit2, type(uint256).max);
+        // Approve Universal Router via Permit2
+        IPermit2(_permit2).approve(_weth, _universalRouter, type(uint160).max, type(uint48).max);
     }
 
-    /// @notice Update pool fee tier for swaps
-    function setPoolFee(uint24 _poolFee) external onlyOwner {
-        uint24 oldFee = poolFee;
-        poolFee = _poolFee;
-        emit PoolFeeUpdated(oldFee, _poolFee);
+    /// @notice Update pool key for V4 swaps
+    function setPoolKey(PoolKey memory _poolKey) external onlyOwner {
+        PoolKey memory oldKey = poolKey;
+        poolKey = _poolKey;
+        emit PoolKeyUpdated(oldKey, _poolKey);
     }
 
     /// @notice Place a bet with collateral tokens directly
@@ -145,7 +158,7 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
         emit BetPlaced(betId, msg.sender, uint128(amount), targetOddsE18, uint64(block.number));
     }
 
-    /// @notice Place a bet with ETH - swaps to collateral token via Uniswap
+    /// @notice Place a bet with ETH - swaps to collateral token via Uniswap V4
     /// @param targetOddsE18 Target win probability (18 decimals)
     /// @param minTokensOut Minimum tokens to receive from swap (slippage protection)
     /// @return betId The ID of the placed bet
@@ -161,21 +174,8 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
         require(msg.value > 0, "No ETH sent");
         BetMath.validateOdds(targetOddsE18);
 
-        // Wrap ETH to WETH
-        weth.deposit{ value: msg.value }();
-
-        // Swap WETH -> collateral token
-        uint256 tokensReceived = swapRouter.exactInputSingle(
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: address(weth),
-                tokenOut: address(collateralToken),
-                fee: poolFee,
-                recipient: address(this),
-                amountIn: msg.value,
-                amountOutMinimum: minTokensOut,
-                sqrtPriceLimitX96: 0
-            })
-        );
+        // Execute swap via Universal Router
+        uint256 tokensReceived = _swapETHForTokens(msg.value, minTokensOut);
 
         require(tokensReceived >= MIN_BET, "Bet too small");
 
@@ -198,6 +198,150 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
         pendingBetIndex[betId] = pendingBetIds.length; // 1-indexed
 
         emit BetPlaced(betId, msg.sender, uint128(tokensReceived), targetOddsE18, uint64(block.number));
+    }
+
+    /// @notice Place a new bet and claim a previous bet in one transaction
+    /// @dev Useful for strategies like martingale where bets are placed sequentially
+    /// @param amount Amount of tokens to bet
+    /// @param targetOddsE18 Target win probability (18 decimals)
+    /// @param previousBetId The bet ID to claim (must be caller's bet and ready to claim)
+    /// @return betId The ID of the new bet
+    /// @return previousWon Whether the previous bet won
+    /// @return previousPayout Payout from the previous bet (0 if lost)
+    function placeBetAndClaimPrevious(uint256 amount, uint64 targetOddsE18, uint256 previousBetId)
+        external
+        nonReentrant
+        returns (uint256 betId, bool previousWon, uint256 previousPayout)
+    {
+        // First, claim the previous bet
+        (previousWon, previousPayout) = _claimInternal(previousBetId);
+
+        // Then place the new bet (inline to avoid reentrancy issues)
+        _sweepExpiredInternal(5);
+
+        require(amount >= MIN_BET, "Bet too small");
+        BetMath.validateOdds(targetOddsE18);
+
+        uint256 bankroll = _getHouseBalance();
+        uint256 maxBet = KellyCriterion.calculateMaxBet(bankroll, targetOddsE18, houseEdgeE18);
+        require(amount <= maxBet, "Bet exceeds max");
+
+        // Transfer tokens from player
+        collateralToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        betId = nextBetId++;
+
+        bets[betId] = Bet({
+            player: msg.sender,
+            amount: uint128(amount),
+            targetOddsE18: targetOddsE18,
+            blockNumber: uint64(block.number),
+            status: BetStatus.Pending
+        });
+
+        // Add to pending queue
+        pendingBetIds.push(betId);
+        pendingBetIndex[betId] = pendingBetIds.length;
+
+        emit BetPlaced(betId, msg.sender, uint128(amount), targetOddsE18, uint64(block.number));
+    }
+
+    /// @notice Internal claim function that returns result instead of just executing
+    function _claimInternal(uint256 betId) internal returns (bool won, uint256 payout) {
+        Bet storage bet = bets[betId];
+        require(bet.player == msg.sender, "Not your bet");
+        require(bet.status == BetStatus.Pending, "Bet not pending");
+
+        // Check blockhash availability
+        uint64 resultBlock = bet.blockNumber + 1;
+        require(block.number > resultBlock, "Wait for next block");
+        require(block.number <= resultBlock + BLOCKHASH_LOOKBACK, "Blockhash expired");
+
+        bytes32 futureBlockHash = blockhash(resultBlock);
+        require(futureBlockHash != bytes32(0), "Blockhash unavailable");
+
+        uint256 randomResult = BetMath.computeRandomResult(betId, futureBlockHash);
+        won = BetMath.isWinner(randomResult, bet.targetOddsE18, houseEdgeE18);
+
+        if (won) {
+            payout = BetMath.calculatePayout(bet.amount, bet.targetOddsE18);
+            bet.status = BetStatus.Claimed;
+
+            _removeFromPending(betId);
+
+            // Request payout from vault
+            uint256 payoutFromVault = payout > bet.amount ? payout - bet.amount : 0;
+            if (payoutFromVault > 0) {
+                IClawdiceVault(vault).withdrawForPayout(payoutFromVault);
+            }
+
+            // Transfer winnings to player
+            collateralToken.safeTransfer(msg.sender, payout);
+
+            emit BetResolved(betId, true, payout);
+            emit BetClaimed(betId, msg.sender, payout);
+        } else {
+            payout = 0;
+            bet.status = BetStatus.Lost;
+            _removeFromPending(betId);
+
+            // Send lost bet to vault
+            _sendToVault(bet.amount);
+
+            emit BetResolved(betId, false, 0);
+        }
+    }
+
+    /// @notice Internal function to swap ETH for tokens via Uniswap V4 Universal Router
+    function _swapETHForTokens(uint256 ethAmount, uint256 minTokensOut) internal returns (uint256 tokensReceived) {
+        uint256 balanceBefore = collateralToken.balanceOf(address(this));
+
+        // Wrap ETH to WETH
+        weth.deposit{value: ethAmount}();
+
+        // Determine swap direction based on pool key
+        // currency0 < currency1 by convention
+        bool zeroForOne = Currency.unwrap(poolKey.currency0) == address(weth);
+
+        // Encode V4 swap actions
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_IN_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE_ALL)
+        );
+
+        // Encode swap parameters
+        bytes[] memory params = new bytes[](3);
+        params[0] = abi.encode(
+            IV4Router.ExactInputSingleParams({
+                poolKey: poolKey,
+                zeroForOne: zeroForOne,
+                amountIn: uint128(ethAmount),
+                amountOutMinimum: uint128(minTokensOut),
+                hookData: bytes("")
+            })
+        );
+
+        // Settle input token (WETH)
+        if (zeroForOne) {
+            params[1] = abi.encode(poolKey.currency0, ethAmount);
+            params[2] = abi.encode(poolKey.currency1, minTokensOut);
+        } else {
+            params[1] = abi.encode(poolKey.currency1, ethAmount);
+            params[2] = abi.encode(poolKey.currency0, minTokensOut);
+        }
+
+        // Encode Universal Router command
+        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
+        bytes[] memory inputs = new bytes[](1);
+        inputs[0] = abi.encode(actions, params);
+
+        // Execute swap
+        universalRouter.execute(commands, inputs, block.timestamp + 60);
+
+        // Calculate tokens received
+        tokensReceived = collateralToken.balanceOf(address(this)) - balanceBefore;
+        require(tokensReceived >= minTokensOut, "Insufficient output");
     }
 
     /// @notice Claim winnings from a winning bet
@@ -227,7 +371,7 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
             // Request payout from vault (vault sends tokens to this contract)
             uint256 payoutFromVault = payout > bet.amount ? payout - bet.amount : 0;
             if (payoutFromVault > 0) {
-                IClawsinoVault(vault).withdrawForPayout(payoutFromVault);
+                IClawdiceVault(vault).withdrawForPayout(payoutFromVault);
             }
 
             // Transfer winnings to player
@@ -335,7 +479,7 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
 
     /// @notice Get house balance from vault
     function _getHouseBalance() internal view returns (uint256) {
-        return IClawsinoVault(vault).totalAssets() + collateralToken.balanceOf(address(this));
+        return IClawdiceVault(vault).totalAssets() + collateralToken.balanceOf(address(this));
     }
 
     /// @notice Send tokens to vault
@@ -370,5 +514,5 @@ contract Clawsino is IClawsino, ReentrancyGuard, Ownable {
     }
 
     /// @notice Receive ETH (for refunds if swap fails, or direct transfers)
-    receive() external payable { }
+    receive() external payable {}
 }

@@ -1,0 +1,186 @@
+---
+name: clawdice
+description: Clawdice gambling CLI - place bets, stake, and run betting strategies
+version: 1.0.0
+author: OpenClaw
+---
+
+# Clawdice Skill
+
+You are helping the user interact with Clawdice, an on-chain gambling protocol built on Base.
+
+## Overview
+
+Clawdice is a provably fair betting game where:
+- Users bet on coin-flip style outcomes with configurable odds
+- House uses Kelly Criterion to limit max bet sizes
+- ERC-4626 vault allows staking to earn from house edge
+- Uses Uniswap V4 for ETH -> token swaps
+- Commit-reveal randomness using future blockhash
+- ~8 minute claim window on Base (240 blocks at 2s/block)
+
+## Key Concepts
+
+### Odds
+- Odds are expressed as win probability (0.01 to 0.99)
+- 50% odds = 2x payout on win
+- 25% odds = 4x payout on win
+- 10% odds = 10x payout on win
+
+### House Edge
+- Default 1% house edge
+- Effective odds = target odds - house edge
+- Example: 50% bet actually has 49% chance of winning
+
+### Kelly Criterion
+- Max bet = (bankroll × house_edge) / (multiplier - 1)
+- Protects vault from catastrophic losses
+- Higher odds (lower win %) = lower max bet
+
+## Betting Strategies
+
+The SDK includes classic betting strategies from 14th-18th century French mathematicians:
+
+### 1. Martingale
+- Double bet after each loss, reset after win
+- Risk: EXTREME - exponential bet growth
+- Origin: 18th century France
+
+### 2. Anti-Martingale (Paroli)
+- Double bet after each win, reset after loss
+- Risk: MEDIUM - limits losses, rides winning streaks
+- Origin: 16th century Italy
+
+### 3. D'Alembert
+- Increase by 1 unit after loss, decrease after win
+- Risk: MEDIUM - slower progression
+- Origin: 18th century (Jean-Baptiste d'Alembert)
+
+### 4. Fibonacci
+- Follow sequence 1,1,2,3,5,8,13... on losses
+- Move back 2 positions after win
+- Risk: HIGH - slower than Martingale but still exponential
+
+### 5. Labouchère (Cancellation)
+- Use a number sequence, bet sum of first+last
+- Win: remove both numbers. Loss: add amount to end
+- Risk: HIGH - sequence can grow long
+
+### 6. Oscar's Grind
+- Increase by 1 unit after win if behind, same after loss
+- Goal: profit 1 unit per cycle
+- Risk: LOW - very conservative
+
+## SDK Usage
+
+```typescript
+import {
+  Clawdice,
+  deployments,
+  // Strategies
+  martingale,
+  antiMartingale,
+  dAlembert,
+  fibonacci,
+  labouchere,
+  oscarsGrind,
+  createInitialState,
+  updateState,
+  STRATEGIES,
+} from '@clawdice/sdk';
+
+// Initialize
+const clawdice = new Clawdice({
+  chain: base,
+  clawdiceAddress: deployments.base.clawdice,
+  vaultAddress: deployments.base.vault,
+  tokenAddress: deployments.base.token,
+  account: walletClient.account,
+});
+
+// Place bet with tokens
+await clawdice.placeBet({ amount: '10', odds: 0.5 });
+
+// Place bet with ETH (swaps to tokens)
+await clawdice.placeBetWithETH({ ethAmount: '0.01', odds: 0.5 });
+
+// Stake in vault
+await clawdice.vault.stakeWithETH('0.1', 0n);
+
+// Run a strategy
+let state = createInitialState(parseEther('1'));
+const maxBet = await clawdice.getMaxBet(0.5);
+
+const decision = martingale(state, maxBet);
+if (decision.shouldBet) {
+  const { betId } = await clawdice.placeBet({
+    amount: decision.amount,
+    odds: decision.odds,
+  });
+  // Wait for result...
+  const result = await clawdice.computeResult(betId);
+  state = updateState(state, result.won, decision.amount, result.payout);
+}
+```
+
+## Contract Addresses (Base)
+
+| Contract | Address |
+|----------|---------|
+| WETH | 0x4200000000000000000000000000000000000006 |
+| Universal Router (V4) | 0x6ff5693b99212da76ad316178a184ab56d299b43 |
+| Permit2 | 0x000000000022D473030F116dDEE9F6B43aC78BA3 |
+| Clawdice | TBD (not yet deployed) |
+| ClawdiceVault | TBD (not yet deployed) |
+
+## Commands
+
+When the user asks about Clawdice, you can help with:
+
+1. **Explaining odds and payouts**
+   - Calculate expected value
+   - Show multipliers for different odds
+
+2. **Betting strategies**
+   - Explain how each strategy works
+   - Simulate strategy runs
+   - Calculate risk/reward
+
+3. **Staking**
+   - Explain ERC-4626 vault mechanics
+   - Show share price calculations
+   - Estimate APY from house edge
+
+4. **Development**
+   - Deploy contracts
+   - Run tests
+   - Update SDK
+
+## Files
+
+- Contracts: `/home/gigi/.openclaw/workspace/clawdice/src/`
+- Tests: `/home/gigi/.openclaw/workspace/clawdice/test/`
+- SDK: `/home/gigi/.openclaw/workspace/clawdice/sdk/src/`
+- Strategies: `/home/gigi/.openclaw/workspace/clawdice/sdk/src/strategies.ts`
+
+## Example Interactions
+
+User: "Run a martingale simulation"
+→ Create initial state, simulate 20 bets, show P&L
+
+User: "What's the max bet at 25% odds?"
+→ Calculate using Kelly Criterion formula
+
+User: "How much would I win on a 100 token bet at 10% odds?"
+→ Calculate: 100 × (1/0.10) = 1000 tokens
+
+User: "Compare the strategies"
+→ Show risk levels, origins, and use cases for each
+
+## Warnings
+
+ALWAYS remind users:
+1. All betting strategies have NEGATIVE expected value against house edge
+2. Martingale and similar can lead to catastrophic losses
+3. These strategies are for entertainment/education only
+4. Never bet more than you can afford to lose

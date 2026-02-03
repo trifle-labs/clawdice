@@ -1,6 +1,6 @@
 ---
-name: clawsino
-description: Interact with Clawsino provably fair dice game
+name: clawdice
+description: Interact with Clawdice provably fair dice game
 version: 0.1.0
 author: Trifle Labs
 commands:
@@ -52,17 +52,17 @@ commands:
 dependencies:
   - evm
 env:
-  - CLAWSINO_NETWORK
-  - CLAWSINO_RPC_URL
+  - CLAWDICE_NETWORK
+  - CLAWDICE_RPC_URL
 ---
 
-# Clawsino Skill
+# Clawdice Skill
 
-Interact with the Clawsino provably fair on-chain dice game.
+Interact with the Clawdice provably fair on-chain dice game.
 
 ## Overview
 
-Clawsino is a commit-reveal dice game where:
+Clawdice is a commit-reveal dice game where:
 - Players bet ETH with customizable odds (e.g., 50% chance to 2x)
 - Randomness derived from future block hash
 - House bank accepts stakes from LPs via ERC-4626 vault
@@ -73,12 +73,12 @@ Clawsino is a commit-reveal dice game where:
 ### Place a Bet
 
 ```bash
-clawsino bet <amount> <odds>
+clawdice bet <amount> <odds>
 ```
 
 Example: Bet 0.1 ETH at 50% odds (2x multiplier)
 ```bash
-clawsino bet 0.1 0.5
+clawdice bet 0.1 0.5
 ```
 
 The bet is placed immediately. Wait for the next block to see results.
@@ -86,7 +86,7 @@ The bet is placed immediately. Wait for the next block to see results.
 ### Check Bet Status
 
 ```bash
-clawsino status <betId>
+clawdice status <betId>
 ```
 
 Shows bet details and whether you won or lost (after next block).
@@ -94,7 +94,7 @@ Shows bet details and whether you won or lost (after next block).
 ### Claim Winnings
 
 ```bash
-clawsino claim <betId>
+clawdice claim <betId>
 ```
 
 Claim your payout if you won. Must be done within 256 blocks.
@@ -102,7 +102,7 @@ Claim your payout if you won. Must be done within 256 blocks.
 ### Get Max Bet
 
 ```bash
-clawsino max-bet <odds>
+clawdice max-bet <odds>
 ```
 
 Check the maximum bet allowed for given odds. Based on Kelly Criterion.
@@ -110,7 +110,7 @@ Check the maximum bet allowed for given odds. Based on Kelly Criterion.
 ### Stake in Vault
 
 ```bash
-clawsino stake <amount>
+clawdice stake <amount>
 ```
 
 Stake ETH to become a house LP. Receive clawETH shares.
@@ -118,7 +118,7 @@ Stake ETH to become a house LP. Receive clawETH shares.
 ### Unstake from Vault
 
 ```bash
-clawsino unstake <shares>
+clawdice unstake <shares>
 ```
 
 Burn clawETH shares to receive ETH. Value fluctuates with house P&L.
@@ -126,7 +126,7 @@ Burn clawETH shares to receive ETH. Value fluctuates with house P&L.
 ### Check Balance
 
 ```bash
-clawsino balance
+clawdice balance
 ```
 
 View your clawETH shares and their ETH value.
@@ -134,7 +134,7 @@ View your clawETH shares and their ETH value.
 ### Contract Info
 
 ```bash
-clawsino info
+clawdice info
 ```
 
 Shows house edge, pending bets, vault stats, and max bets.
@@ -167,19 +167,19 @@ For 10 ETH house with 1% edge:
 
 When receiving a bet request:
 
-1. Query max bet: `clawsino max-bet <odds>`
+1. Query max bet: `clawdice max-bet <odds>`
 2. Validate amount doesn't exceed max
-3. Place bet: `clawsino bet <amount> <odds>`
+3. Place bet: `clawdice bet <amount> <odds>`
 4. Store bet ID
-5. After next block, check result: `clawsino status <betId>`
-6. If won, claim: `clawsino claim <betId>`
+5. After next block, check result: `clawdice status <betId>`
+6. If won, claim: `clawdice claim <betId>`
 
 Example interaction:
 ```
 User: Roll the dice! 0.05 ETH at 50% odds
 Agent:
   1. Check max bet for 50% odds: 0.1 ETH ✓
-  2. Place bet: clawsino bet 0.05 0.5
+  2. Place bet: clawdice bet 0.05 0.5
   3. Bet #123 placed, waiting for block...
   4. Result: WON! Payout: 0.1 ETH
   5. Claiming winnings...
@@ -200,11 +200,11 @@ Risk: High variance short-term, but profitable long-term due to edge.
 
 Set environment variables:
 ```bash
-export CLAWSINO_NETWORK=mainnet  # or sepolia, base
-export CLAWSINO_RPC_URL=https://eth.drpc.org
+export CLAWDICE_NETWORK=mainnet  # or sepolia, base
+export CLAWDICE_RPC_URL=https://eth.drpc.org
 export PRIVATE_KEY=0x...
 ```
 
 ## Contract Addresses
 
-See `@trifle-labs/clawsino` package for deployment addresses.
+See `@trifle-labs/clawdice` package for deployment addresses.

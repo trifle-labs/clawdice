@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { Clawsino, BetStatus, getDeployment } from '@trifle-labs/clawsino';
+import { Clawdice, BetStatus, getDeployment } from '@trifle-labs/clawdice';
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseEther, formatEther, type Address } from 'viem';
 import { mainnet, sepolia, base } from 'viem/chains';
@@ -14,7 +14,7 @@ const chains = {
   base,
 };
 
-function getClawsino(options: { network: string; rpc?: string }) {
+function getClawdice(options: { network: string; rpc?: string }) {
   const network = options.network as keyof typeof chains;
   const chain = chains[network];
   if (!chain) throw new Error(`Unknown network: ${options.network}`);
@@ -22,18 +22,18 @@ function getClawsino(options: { network: string; rpc?: string }) {
   const deployment = getDeployment(network as any);
   const privateKey = process.env.PRIVATE_KEY;
 
-  return new Clawsino({
+  return new Clawdice({
     chain,
     rpcUrl: options.rpc,
-    clawsinoAddress: deployment.clawsino,
+    clawdiceAddress: deployment.clawdice,
     vaultAddress: deployment.vault,
     account: privateKey ? privateKeyToAccount(privateKey as `0x${string}`) : undefined,
   });
 }
 
 program
-  .name('clawsino')
-  .description('CLI for Clawsino provably fair dice game')
+  .name('clawdice')
+  .description('CLI for Clawdice provably fair dice game')
   .version('0.1.0')
   .option('-n, --network <network>', 'Network to use (mainnet, sepolia, base)', 'mainnet')
   .option('-r, --rpc <url>', 'Custom RPC URL');
@@ -49,11 +49,11 @@ program
       process.exit(1);
     }
 
-    const clawsino = getClawsino(cmd.optsWithGlobals());
-    const maxBet = await clawsino.getMaxBet(odds);
-    const multiplier = clawsino.calculateMultiplier(odds);
+    const clawdice = getClawdice(cmd.optsWithGlobals());
+    const maxBet = await clawdice.getMaxBet(odds);
+    const multiplier = clawdice.calculateMultiplier(odds);
 
-    console.log(`Odds: ${clawsino.formatOdds(odds)}`);
+    console.log(`Odds: ${clawdice.formatOdds(odds)}`);
     console.log(`Multiplier: ${multiplier.toFixed(2)}x`);
     console.log(`Max Bet: ${formatEther(maxBet)} ETH`);
   });
@@ -77,20 +77,20 @@ program
       process.exit(1);
     }
 
-    const clawsino = getClawsino(cmd.optsWithGlobals());
-    const payout = clawsino.calculatePayout(amount, odds);
+    const clawdice = getClawdice(cmd.optsWithGlobals());
+    const payout = clawdice.calculatePayout(amount, odds);
 
     console.log(`Placing bet...`);
     console.log(`  Amount: ${formatEther(amount)} ETH`);
-    console.log(`  Odds: ${clawsino.formatOdds(odds)}`);
+    console.log(`  Odds: ${clawdice.formatOdds(odds)}`);
     console.log(`  Potential Payout: ${formatEther(payout)} ETH`);
 
     try {
-      const { hash, betId } = await clawsino.placeBet({ amount, odds });
+      const { hash, betId } = await clawdice.placeBet({ amount, odds });
       console.log(`\nBet placed!`);
       console.log(`  Bet ID: ${betId}`);
       console.log(`  Tx: ${hash}`);
-      console.log(`\nWait for next block, then check result with: clawsino status ${betId}`);
+      console.log(`\nWait for next block, then check result with: clawdice status ${betId}`);
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
@@ -103,27 +103,27 @@ program
   .argument('<betId>', 'Bet ID')
   .action(async (betIdStr: string, _, cmd) => {
     const betId = BigInt(betIdStr);
-    const clawsino = getClawsino(cmd.optsWithGlobals());
+    const clawdice = getClawdice(cmd.optsWithGlobals());
 
-    const bet = await clawsino.getBet(betId);
+    const bet = await clawdice.getBet(betId);
     const statusNames = ['Pending', 'Won', 'Lost', 'Claimed', 'Expired'];
     const odds = Number(bet.targetOddsE18) / 1e18;
 
     console.log(`Bet #${betId}`);
     console.log(`  Player: ${bet.player}`);
     console.log(`  Amount: ${formatEther(bet.amount)} ETH`);
-    console.log(`  Odds: ${clawsino.formatOdds(odds)}`);
+    console.log(`  Odds: ${clawdice.formatOdds(odds)}`);
     console.log(`  Block: ${bet.blockNumber}`);
     console.log(`  Status: ${statusNames[bet.status]}`);
 
     if (bet.status === BetStatus.Pending) {
       try {
-        const result = await clawsino.computeResult(betId);
+        const result = await clawdice.computeResult(betId);
         console.log(`\nResult Available:`);
         console.log(`  Won: ${result.won ? 'YES!' : 'No'}`);
         if (result.won) {
           console.log(`  Payout: ${formatEther(result.payout)} ETH`);
-          console.log(`\nClaim with: clawsino claim ${betId}`);
+          console.log(`\nClaim with: clawdice claim ${betId}`);
         }
       } catch {
         console.log(`\nResult not available yet (wait for next block)`);
@@ -143,12 +143,12 @@ program
       process.exit(1);
     }
 
-    const clawsino = getClawsino(cmd.optsWithGlobals());
+    const clawdice = getClawdice(cmd.optsWithGlobals());
 
     console.log(`Claiming bet #${betId}...`);
 
     try {
-      const hash = await clawsino.claim(betId);
+      const hash = await clawdice.claim(betId);
       console.log(`Claimed!`);
       console.log(`Tx: ${hash}`);
     } catch (err: any) {
@@ -167,12 +167,12 @@ program
       process.exit(1);
     }
 
-    const clawsino = getClawsino(cmd.optsWithGlobals());
+    const clawdice = getClawdice(cmd.optsWithGlobals());
 
     console.log(`Staking ${amountStr} ETH...`);
 
     try {
-      const hash = await clawsino.vault.stake(amountStr);
+      const hash = await clawdice.vault.stake(amountStr);
       console.log(`Staked!`);
       console.log(`Tx: ${hash}`);
     } catch (err: any) {
@@ -191,13 +191,13 @@ program
       process.exit(1);
     }
 
-    const clawsino = getClawsino(cmd.optsWithGlobals());
+    const clawdice = getClawdice(cmd.optsWithGlobals());
     const shares = parseEther(sharesStr);
 
     console.log(`Unstaking ${sharesStr} shares...`);
 
     try {
-      const hash = await clawsino.vault.unstake(shares);
+      const hash = await clawdice.vault.unstake(shares);
       console.log(`Unstaked!`);
       console.log(`Tx: ${hash}`);
     } catch (err: any) {
@@ -211,7 +211,7 @@ program
   .description('Check vault balance')
   .argument('[address]', 'Address to check (defaults to signer)')
   .action(async (address: string | undefined, _, cmd) => {
-    const clawsino = getClawsino(cmd.optsWithGlobals());
+    const clawdice = getClawdice(cmd.optsWithGlobals());
 
     let addr: Address;
     if (address) {
@@ -223,10 +223,10 @@ program
       process.exit(1);
     }
 
-    const shares = await clawsino.vault.balanceOf(addr);
-    const sharePrice = await clawsino.vault.getSharePrice();
+    const shares = await clawdice.vault.balanceOf(addr);
+    const sharePrice = await clawdice.vault.getSharePrice();
     const value = Number(formatEther(shares)) * sharePrice;
-    const totalAssets = await clawsino.vault.totalAssets();
+    const totalAssets = await clawdice.vault.totalAssets();
 
     console.log(`Vault Stats:`);
     console.log(`  Total Assets: ${formatEther(totalAssets)} ETH`);
@@ -240,14 +240,14 @@ program
   .command('info')
   .description('Show contract info')
   .action(async (_, cmd) => {
-    const clawsino = getClawsino(cmd.optsWithGlobals());
+    const clawdice = getClawdice(cmd.optsWithGlobals());
 
-    const houseEdge = await clawsino.getHouseEdge();
-    const pendingBets = await clawsino.getPendingBetCount();
-    const totalAssets = await clawsino.vault.totalAssets();
-    const sharePrice = await clawsino.vault.getSharePrice();
+    const houseEdge = await clawdice.getHouseEdge();
+    const pendingBets = await clawdice.getPendingBetCount();
+    const totalAssets = await clawdice.vault.totalAssets();
+    const sharePrice = await clawdice.vault.getSharePrice();
 
-    console.log(`Clawsino Info:`);
+    console.log(`Clawdice Info:`);
     console.log(`  House Edge: ${(houseEdge * 100).toFixed(2)}%`);
     console.log(`  Pending Bets: ${pendingBets}`);
     console.log(`\nVault:`);
@@ -256,7 +256,7 @@ program
     console.log(`\nMax Bets:`);
 
     for (const odds of [0.5, 0.25, 0.1]) {
-      const maxBet = await clawsino.getMaxBet(odds);
+      const maxBet = await clawdice.getMaxBet(odds);
       console.log(`  ${(odds * 100).toFixed(0)}% odds: ${formatEther(maxBet)} ETH`);
     }
   });

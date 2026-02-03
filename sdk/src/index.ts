@@ -12,14 +12,39 @@ import {
   type Account,
 } from 'viem';
 import { mainnet, base } from 'viem/chains';
-import { ClawsinoABI, ClawsinoVaultABI, ERC20ABI, BetStatus } from './abi';
+import { ClawdiceABI, ClawdiceVaultABI, ERC20ABI, BetStatus } from './abi';
 
-export { ClawsinoABI, ClawsinoVaultABI, ERC20ABI, BetStatus } from './abi';
+export { ClawdiceABI, ClawdiceVaultABI, ERC20ABI, BetStatus } from './abi';
 
-export interface ClawsinoConfig {
+// Betting Strategies
+export {
+  // Types
+  type BetDecision,
+  type StrategyState,
+  type LabouchereState,
+  type OscarsGrindState,
+  type StrategyName,
+  // State helpers
+  createInitialState,
+  updateState,
+  createLabouchereState,
+  createOscarsGrindState,
+  // Strategies
+  martingale,
+  antiMartingale,
+  dAlembert,
+  fibonacci,
+  labouchere,
+  updateLabouchereSequence,
+  oscarsGrind,
+  // Strategy metadata
+  STRATEGIES,
+} from './strategies';
+
+export interface ClawdiceConfig {
   rpcUrl?: string;
   chain?: Chain;
-  clawsinoAddress: Address;
+  clawdiceAddress: Address;
   vaultAddress: Address;
   tokenAddress: Address;
   account?: Account;
@@ -51,17 +76,17 @@ export interface PlaceBetWithETHParams {
 
 const E18 = BigInt(10 ** 18);
 
-export class Clawsino {
+export class Clawdice {
   private publicClient: PublicClient;
   private walletClient?: WalletClient;
-  private clawsinoAddress: Address;
+  private clawdiceAddress: Address;
   private vaultAddress: Address;
   private tokenAddress: Address;
   private chain: Chain;
 
-  constructor(config: ClawsinoConfig) {
+  constructor(config: ClawdiceConfig) {
     this.chain = config.chain ?? mainnet;
-    this.clawsinoAddress = config.clawsinoAddress;
+    this.clawdiceAddress = config.clawdiceAddress;
     this.vaultAddress = config.vaultAddress;
     this.tokenAddress = config.tokenAddress;
 
@@ -84,8 +109,8 @@ export class Clawsino {
   async getMaxBet(odds: number): Promise<bigint> {
     const oddsE18 = BigInt(Math.floor(odds * 1e18));
     return this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'getMaxBet',
       args: [oddsE18],
     });
@@ -93,8 +118,8 @@ export class Clawsino {
 
   async getBet(betId: bigint): Promise<Bet> {
     const result = await this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'getBet',
       args: [betId],
     });
@@ -109,8 +134,8 @@ export class Clawsino {
 
   async computeResult(betId: bigint): Promise<BetResult> {
     const [won, payout] = await this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'computeResult',
       args: [betId],
     });
@@ -119,8 +144,8 @@ export class Clawsino {
 
   async getHouseEdge(): Promise<number> {
     const edgeE18 = await this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'houseEdgeE18',
     });
     return Number(edgeE18) / 1e18;
@@ -128,24 +153,24 @@ export class Clawsino {
 
   async getPendingBetCount(): Promise<bigint> {
     return this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'getPendingBetCount',
     });
   }
 
   async getNextBetId(): Promise<bigint> {
     return this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'nextBetId',
     });
   }
 
   async getCollateralToken(): Promise<Address> {
     return this.publicClient.readContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'collateralToken',
     });
   }
@@ -180,7 +205,7 @@ export class Clawsino {
       address: this.tokenAddress,
       abi: ERC20ABI,
       functionName: 'approve',
-      args: [this.clawsinoAddress, amount],
+      args: [this.clawdiceAddress, amount],
     });
   }
 
@@ -200,8 +225,8 @@ export class Clawsino {
     }
 
     const hash = await this.walletClient.writeContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'placeBet',
       args: [amount, oddsE18],
     });
@@ -224,8 +249,8 @@ export class Clawsino {
     const minTokensOut = params.minTokensOut ?? 0n;
 
     const hash = await this.walletClient.writeContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'placeBetWithETH',
       args: [oddsE18, minTokensOut],
       value: ethAmount,
@@ -242,8 +267,8 @@ export class Clawsino {
     if (!this.walletClient) throw new Error('Wallet client required for write operations');
 
     return this.walletClient.writeContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'claim',
       args: [betId],
     });
@@ -253,8 +278,8 @@ export class Clawsino {
     if (!this.walletClient) throw new Error('Wallet client required for write operations');
 
     return this.walletClient.writeContract({
-      address: this.clawsinoAddress,
-      abi: ClawsinoABI,
+      address: this.clawdiceAddress,
+      abi: ClawdiceABI,
       functionName: 'sweepExpired',
       args: [maxCount],
     });
@@ -263,7 +288,7 @@ export class Clawsino {
   // ============ Vault Functions ============
 
   get vault() {
-    return new ClawsinoVaultClient(
+    return new ClawdiceVaultClient(
       this.publicClient,
       this.walletClient,
       this.vaultAddress,
@@ -287,7 +312,7 @@ export class Clawsino {
   }
 }
 
-export class ClawsinoVaultClient {
+export class ClawdiceVaultClient {
   constructor(
     private publicClient: PublicClient,
     private walletClient: WalletClient | undefined,
@@ -298,7 +323,7 @@ export class ClawsinoVaultClient {
   async totalAssets(): Promise<bigint> {
     return this.publicClient.readContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'totalAssets',
     });
   }
@@ -306,7 +331,7 @@ export class ClawsinoVaultClient {
   async totalSupply(): Promise<bigint> {
     return this.publicClient.readContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'totalSupply',
     });
   }
@@ -314,7 +339,7 @@ export class ClawsinoVaultClient {
   async balanceOf(account: Address): Promise<bigint> {
     return this.publicClient.readContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'balanceOf',
       args: [account],
     });
@@ -323,7 +348,7 @@ export class ClawsinoVaultClient {
   async previewDeposit(assets: bigint): Promise<bigint> {
     return this.publicClient.readContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'previewDeposit',
       args: [assets],
     });
@@ -332,7 +357,7 @@ export class ClawsinoVaultClient {
   async previewRedeem(shares: bigint): Promise<bigint> {
     return this.publicClient.readContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'previewRedeem',
       args: [shares],
     });
@@ -369,7 +394,7 @@ export class ClawsinoVaultClient {
 
     return this.walletClient.writeContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'stake',
       args: [assets],
     });
@@ -385,7 +410,7 @@ export class ClawsinoVaultClient {
 
     return this.walletClient.writeContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'stakeWithETH',
       args: [minTokensOut],
       value,
@@ -397,7 +422,7 @@ export class ClawsinoVaultClient {
 
     return this.walletClient.writeContract({
       address: this.vaultAddress,
-      abi: ClawsinoVaultABI,
+      abi: ClawdiceVaultABI,
       functionName: 'unstake',
       args: [shares],
     });
@@ -407,18 +432,28 @@ export class ClawsinoVaultClient {
 // Deployment info helper
 export const deployments = {
   mainnet: {
-    clawsino: '0x0000000000000000000000000000000000000000' as Address,
+    clawdice: '0x0000000000000000000000000000000000000000' as Address,
     vault: '0x0000000000000000000000000000000000000000' as Address,
     token: '0x0000000000000000000000000000000000000000' as Address,
     weth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' as Address,
-    swapRouter: '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45' as Address,
+    universalRouter: '0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af' as Address,
+    permit2: '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address,
   },
   base: {
-    clawsino: '0x0000000000000000000000000000000000000000' as Address,
+    clawdice: '0x0000000000000000000000000000000000000000' as Address,
     vault: '0x0000000000000000000000000000000000000000' as Address,
     token: '0x0000000000000000000000000000000000000000' as Address,
     weth: '0x4200000000000000000000000000000000000006' as Address,
-    swapRouter: '0x2626664c2603336E57B271c5C0b26F421741e481' as Address,
+    universalRouter: '0x6ff5693b99212da76ad316178a184ab56d299b43' as Address,
+    permit2: '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address,
+  },
+  baseSepolia: {
+    clawdice: '0x0000000000000000000000000000000000000000' as Address,
+    vault: '0x0000000000000000000000000000000000000000' as Address,
+    token: '0x0000000000000000000000000000000000000000' as Address,
+    weth: '0x4200000000000000000000000000000000000006' as Address,
+    universalRouter: '0x492E6456D9528771018DeB9E87ef7750EF184104' as Address,
+    permit2: '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address,
   },
 };
 
