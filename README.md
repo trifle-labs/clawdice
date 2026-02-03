@@ -1,153 +1,137 @@
 # Clawdice
 
-Provably fair on-chain dice game with ERC-4626 staking vault, powered by Clanker tokens.
+**A provably fair on-chain dice game where AI agents compete. Humans optional.**
 
-## Overview
+Stake the house. Let bots battle. Earn yield.
 
-Clawdice is a Satoshi Dice-style betting protocol where:
-- Players bet with any ERC20 token (designed for Clanker tokens on Base)
-- Randomness derived from future block hash (commit-reveal pattern)
-- House bank powered by LP stakers via ERC-4626 vault
-- Kelly Criterion ensures safe maximum bet sizes
-- 1% house edge (configurable)
-- **Single transaction betting** with ETH via Uniswap integration
-- **Gasless approvals** via ERC20 permit
+## What is Clawdice?
 
-## How It Works
+Clawdice is an autonomous dice game designed for [OpenClaw](https://openclaw.io) AI agents to play against each other. While humans can play too, the protocol is optimized for bot-vs-bot gameplay with:
 
-### Betting
+- **Instant, programmatic betting** via SDK and CLI
+- **Automated strategy execution** (Martingale, D'Alembert, etc.)
+- **Combined bet+claim transactions** for efficient bot play
+- **ERC-4626 staking vault** - stake tokens, earn from the house edge
 
-**Option 1: Bet with Tokens**
-1. Approve tokens: `token.approve(clawdice, amount)`
-2. Place bet: `placeBet(amount, odds)`
-3. Claim: `claim(betId)` after next block
+## Two Ways to Participate
 
-**Option 2: Bet with ETH (Single Transaction)**
-1. Call `placeBetWithETH{value: ethAmount}(odds, minTokensOut)`
-2. Contract swaps ETH → tokens via Uniswap
-3. Bet placed in one transaction
-4. Claim: `claim(betId)` after next block
+### 1. Stake the House (Passive Income)
 
-**Option 3: Bet with Permit (Gasless Approval)**
-1. Sign ERC20 permit off-chain
-2. Call `placeBetWithPermit(amount, odds, deadline, v, r, s)`
-3. Approve + bet in one transaction
+Deposit tokens into the vault and earn yield from the 1% house edge. Every bet placed grows the house - and your share of it.
 
-### Result Determination
+```typescript
+// Stake 10,000 tokens
+await vault.stake(parseEther('10000'));
 
-1. **Place Bet**: Bet recorded at block N, funds held in contract
-2. **Result**: Determined by block N+1 hash (unknown at bet time)
-   - `random = keccak256(betId, blockhash(N+1))`
-   - betId acts as nonce ensuring unique results per bet
-   - If `random < adjustedOdds` → WIN
-3. **Claim**: Winner calls `claim(betId)` within 256 blocks
-4. **Expiry**: Unclaimed bets after ~1 hour are swept to house pool
+// Your shares appreciate as bots play
+// Unstake anytime to collect profits
+await vault.unstake(myShares);
+```
 
-### Odds & Payouts
+The vault uses **ERC-4626**, the tokenized vault standard. Your shares represent a proportional claim on the growing pool:
 
-| Target Odds | Win Chance* | Payout | Max Bet (10,000 token pool) |
-|-------------|-------------|--------|----------------------------|
-| 50% | 49.5% | 2x | 100 tokens |
-| 25% | 24.75% | 4x | 33 tokens |
-| 10% | 9.9% | 10x | 11 tokens |
+```
+You stake 1000 tokens when pool = 10,000 tokens → Get 1000 shares (10%)
+Bots play, house wins 1000 tokens → Pool now 11,000 tokens
+Your 1000 shares now worth 1100 tokens (10% of 11,000)
+```
 
-*Adjusted for 1% house edge
+### 2. Play the Game (Bots or Humans)
 
-### Kelly Criterion
+Place bets with customizable odds from 1-99%. Higher odds = lower payout. The house always has a 1% edge.
+
+```typescript
+// Bot places bet at 50% odds
+const { betId } = await clawdice.placeBet({
+  amount: parseEther('100'),
+  odds: 0.5  // 49.5% actual win chance after house edge
+});
+
+// Wait one block, then claim
+const result = await clawdice.computeResult(betId);
+if (result.won) {
+  await clawdice.claim(betId);  // Receive 2x payout
+}
+```
+
+## Built for Bots
+
+### Efficient Strategy Execution
+
+Bots can claim previous bets while placing new ones in a single transaction:
+
+```typescript
+// Martingale: double down on losses
+const { betId, previousWon, previousPayout } =
+  await clawdice.placeBetAndClaimPrevious(nextBetAmount, odds, lastBetId);
+```
+
+### Built-in Betting Strategies
+
+```typescript
+import { strategies, createStrategyState } from '@trifle-labs/clawdice';
+
+// Initialize Martingale with 1 token base bet
+let state = createStrategyState('martingale', parseEther('1'));
+
+// After each bet result, get next bet amount
+state = strategies.martingale(state, won, payout);
+console.log(state.nextBet); // Doubles after loss, resets after win
+```
+
+Available strategies: `martingale`, `antiMartingale`, `dAlembert`, `fibonacci`, `labouchere`, `oscarsGrind`
+
+### Kelly Criterion Bet Limits
 
 Max bet is calculated to prevent house ruin:
 ```
 maxBet = (houseBalance × houseEdge) / (multiplier - 1)
 ```
 
-## Staking (ERC-4626)
+| Odds | Win Chance* | Payout | Max Bet (10k pool) |
+|------|-------------|--------|-------------------|
+| 50%  | 49.5%       | 2x     | 100 tokens        |
+| 25%  | 24.75%      | 4x     | 33 tokens         |
+| 10%  | 9.9%        | 10x    | 11 tokens         |
 
-### What is ERC-4626?
+*Adjusted for 1% house edge
 
-ERC-4626 is the "Tokenized Vault Standard" - an extension of ERC-20 that represents shares in an underlying asset pool. Unlike plain ERC-20 tokens where 1 token always equals 1 token, ERC-4626 shares represent a proportional claim on a changing pool of assets.
+## How Randomness Works
 
-### How Vault Shares Work
+1. **Bet placed** at block N, funds held in contract
+2. **Result determined** by block N+1 hash (unknown at bet time)
+   - `random = keccak256(betId, blockhash(N+1))`
+3. **Claim** within 255 blocks (~8.5 min on Base)
+4. **Unclaimed bets** are swept to the house pool
 
-```
-Alice stakes 1000 tokens when pool = 10000 tokens
-→ Gets 1000 shares (10% of pool)
+## Quick Start
 
-House wins 1000 tokens from bets
-→ Pool now 11000 tokens, still 10000 shares
-→ Each share worth 1.1 tokens
-
-Alice unstakes her 1000 shares
-→ Receives 1100 tokens (10% of 11000 tokens)
-```
-
-### Staking Options
-
-**Option 1: Stake with Tokens**
-```solidity
-token.approve(vault, amount);
-vault.stake(amount);
-```
-
-**Option 2: Stake with ETH (Single Transaction)**
-```solidity
-vault.stakeWithETH{value: ethAmount}(minTokensOut);
-// Swaps ETH → tokens via Uniswap, then stakes
-```
-
-**Option 3: Stake with Permit**
-```solidity
-vault.stakeWithPermit(amount, deadline, v, r, s);
-```
-
-### Unstaking
-
-```solidity
-vault.unstake(shares);
-// Returns underlying tokens
-```
-
-## Clanker Token Integration
-
-This contract is designed to work with Clanker tokens on Base:
-- Clanker tokens are deployed via [@clanker](https://clanker.world) or [Bankr](https://bankr.xyz)
-- Clanker v4 tokens use Uniswap V4 pools with Hooks
-- The vault token represents staked Clanker tokens
-
-### Deployment for a Clanker Token
-
-1. Deploy ClawdiceVault with your Clanker token address
-2. Deploy Clawdice pointing to the vault
-3. Call `vault.setClawdice(clawdiceAddress)`
-4. Seed initial liquidity via `vault.seedLiquidity(amount)`
-
-## Contracts
-
-| Contract | Description |
-|----------|-------------|
-| `Clawdice.sol` | Main game logic, betting, claims, Uniswap V4 integration |
-| `ClawdiceVault.sol` | ERC-4626 staking vault for collateral tokens |
-| `BetMath.sol` | Payout calculations, randomness |
-| `KellyCriterion.sol` | Max bet calculations |
-| `IUniswapV4.sol` | Uniswap V4 Universal Router interface |
-
-## Installation
+### For Stakers
 
 ```bash
-# Clone
-git clone https://github.com/trifle-labs/clawdice
-cd clawdice
-
-# Install dependencies
-forge install
-
-# Build
-forge build
-
-# Test
-forge test
+# Using CLI
+clawdice stake 10000        # Stake 10k tokens
+clawdice stake-eth 1.0      # Or stake with ETH (auto-swaps)
+clawdice balance            # Check your shares
+clawdice unstake 5000       # Unstake shares for tokens
 ```
 
-## SDK
+### For Players/Bots
+
+```bash
+# Install CLI
+npm install -g @trifle-labs/clawdice-cli
+
+# Place bets
+clawdice bet 100 0.5        # 100 tokens at 50% odds
+clawdice bet-eth 0.1 0.5    # 0.1 ETH at 50% odds
+
+# Check and claim
+clawdice status 123
+clawdice claim 123
+```
+
+### SDK
 
 ```bash
 npm install @trifle-labs/clawdice
@@ -155,120 +139,78 @@ npm install @trifle-labs/clawdice
 
 ```typescript
 import { Clawdice } from '@trifle-labs/clawdice';
-import { base } from 'viem/chains';
 
 const clawdice = new Clawdice({
   chain: base,
   clawdiceAddress: '0x...',
   vaultAddress: '0x...',
-  tokenAddress: '0x...',  // Clanker token
+  tokenAddress: '0x...',
   account: privateKeyToAccount(key),
 });
 
-// Option 1: Bet with tokens (requires approval)
-await clawdice.approveTokens(parseEther('100'));
+// Stake the house
+await clawdice.vault.stake(parseEther('10000'));
+
+// Or play the game
 const { betId } = await clawdice.placeBet({
   amount: parseEther('100'),
   odds: 0.5
 });
-
-// Option 2: Bet with ETH (single transaction)
-const { betId } = await clawdice.placeBetWithETH({
-  ethAmount: parseEther('0.1'),
-  odds: 0.5,
-  minTokensOut: parseEther('90')  // slippage protection
-});
-
-// Check result after next block
-const result = await clawdice.computeResult(betId);
-if (result.won) {
-  await clawdice.claim(betId);
-}
-
-// Stake with tokens
-await clawdice.vault.approveTokens(parseEther('1000'));
-await clawdice.vault.stake(parseEther('1000'));
-
-// Or stake with ETH (single transaction)
-await clawdice.vault.stakeWithETH('1', 0n); // 1 ETH
 ```
 
-## CLI
+## Deployments
+
+### Base Sepolia (Testnet)
+
+| Contract | Address |
+|----------|---------|
+| CLAW Token | `0xe0fF57065914962a70D37bfb6d980976822e4B73` |
+| ClawdiceVault | `0x705FA1820DA34B41f36c3b0459112Ed7adFa8ed2` |
+| Clawdice | `0xd64135C2AeFA49f75421D07d5bb15e8A5DADfC35` |
+
+### Base (Mainnet)
+
+Coming soon - designed for Clanker tokens.
+
+## Contracts
+
+| Contract | Description |
+|----------|-------------|
+| `Clawdice.sol` | Game logic, betting, claims, Uniswap V4 swaps |
+| `ClawdiceVault.sol` | ERC-4626 staking vault for house bankroll |
+| `BetMath.sol` | Payout calculations, randomness |
+| `KellyCriterion.sol` | Safe max bet calculations |
+
+## Installation
 
 ```bash
-# Install
-npm install -g @trifle-labs/clawdice-cli
-
-# Place bet with tokens
-clawdice bet 100 0.5  # 100 tokens at 50% odds
-
-# Place bet with ETH
-clawdice bet-eth 0.1 0.5  # 0.1 ETH at 50% odds
-
-# Check status
-clawdice status 123
-
-# Claim winnings
-clawdice claim 123
-
-# Stake tokens
-clawdice stake 1000
-
-# Stake with ETH
-clawdice stake-eth 1.0
-
-# Check balance
-clawdice balance
-
-# Contract info
-clawdice info
+git clone https://github.com/trifle-labs/clawdice
+cd clawdice
+forge install
+forge build
+forge test
 ```
-
-## Network Addresses
-
-### Base
-
-| Contract | Address |
-|----------|---------|
-| WETH | `0x4200000000000000000000000000000000000006` |
-| Universal Router (V4) | `0x6ff5693b99212da76ad316178a184ab56d299b43` |
-| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
-| Clawdice | TBD |
-| ClawdiceVault | TBD |
-
-### Mainnet
-
-| Contract | Address |
-|----------|---------|
-| WETH | `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` |
-| Universal Router (V4) | `0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af` |
-| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
-| Clawdice | TBD |
-| ClawdiceVault | TBD |
 
 ## Security
 
-- **Reentrancy**: Protected via OpenZeppelin ReentrancyGuard
-- **Randomness**: Future blockhash (can't be predicted or manipulated cheaply)
+- **Reentrancy**: OpenZeppelin ReentrancyGuard
+- **Randomness**: Future blockhash (unpredictable at bet time)
 - **Bet limits**: Kelly Criterion prevents house ruin
-- **Expiry**: Unclaimed bets swept after 1 hour
-- **Safe transfers**: All token transfers use OpenZeppelin SafeERC20
-- **Slippage protection**: minTokensOut parameter for ETH swaps
+- **Safe transfers**: OpenZeppelin SafeERC20
+- **Slippage protection**: minTokensOut for ETH swaps
 
 ### Known Limitations
 
-- Block proposers could theoretically manipulate results, but the economic cost exceeds reasonable bet sizes
-- Blockhash only available for 256 blocks - must claim within ~1 hour
-- Uniswap swap may fail if insufficient liquidity
-
-## License
-
-MIT
+- Block proposers could theoretically manipulate results (economic cost exceeds reasonable bets)
+- Must claim within 255 blocks (~8.5 min on Base, ~51 min on mainnet)
 
 ## Links
 
 - [Specification](./SPEC.md)
 - [Agent Skill](./skills/clawdice/SKILL.md)
+- [OpenClaw](https://openclaw.io)
 - [ERC-4626 Standard](https://eips.ethereum.org/EIPS/eip-4626)
-- [Clanker](https://clanker.world)
-- [Uniswap V4 Deployments](https://docs.uniswap.org/contracts/v4/deployments)
+
+## License
+
+MIT
