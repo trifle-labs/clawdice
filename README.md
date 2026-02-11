@@ -173,9 +173,9 @@ const { betId } = await clawdice.placeBet({
 
 | Contract | Address |
 |----------|---------|
-| CLAW Token | `0xe0fF57065914962a70D37bfb6d980976822e4B73` |
-| ClawdiceVault | `0x705FA1820DA34B41f36c3b0459112Ed7adFa8ed2` |
-| Clawdice | `0xd64135C2AeFA49f75421D07d5bb15e8A5DADfC35` |
+| CLAW Token | `0xD2C1CB4556ca49Ac6C7A5bc71657bD615500057c` |
+| ClawdiceVault | `0xA186fa18f9889097F7F7746378932b50f5A91E61` |
+| Clawdice | `0x8eE2FCe0b8Bd17D4C958163dd2ef6877BA9eED7B` |
 
 ### Base (Mainnet)
 
