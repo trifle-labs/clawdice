@@ -1,0 +1,18 @@
+{
+  "baseSepolia": {
+    "chainId": 84532,
+    "clawToken": "0xD2C1CB4556ca49Ac6C7A5bc71657bD615500057c",
+    "clawdice": "0x3971dFAEa81B4C57c195Ae36510ec110375c0F71",
+    "clawdiceVault": "0x42Ba5FC8870860fcE4C81931FD282118616cE480",
+    "deployedAt": "2026-02-12T18:56:00Z",
+    "deployer": "0x312e253d1C18b92112aD2276Ade650FE7E620D1a"
+  },
+  "base": {
+    "chainId": 8453,
+    "clawToken": null,
+    "clawdice": null,
+    "clawdiceVault": null,
+    "deployedAt": null,
+    "deployer": null
+  }
+}
