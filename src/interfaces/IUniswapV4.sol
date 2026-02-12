@@ -93,10 +93,10 @@ library Commands {
 }
 
 /// @title V4 Router Actions
-/// @notice Action bytes for V4 router
+/// @notice Action bytes for V4 router (must match v4-periphery/src/libraries/Actions.sol)
 library Actions {
     uint8 internal constant SWAP_EXACT_IN_SINGLE = 0x06;
     uint8 internal constant SWAP_EXACT_IN = 0x07;
-    uint8 internal constant SETTLE_ALL = 0x12;
-    uint8 internal constant TAKE_ALL = 0x15;
+    uint8 internal constant SETTLE_ALL = 0x0c;  // Fixed: was 0x12
+    uint8 internal constant TAKE_ALL = 0x0f;    // Fixed: was 0x15
 }
