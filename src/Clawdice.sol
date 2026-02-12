@@ -258,9 +258,9 @@ contract Clawdice is IClawdice, ReentrancyGuard, Ownable {
     }
 
     /// @notice Internal claim function that returns result instead of just executing
+    /// @dev Anyone can call - payout always goes to bet.player, not msg.sender
     function _claimInternal(uint256 betId) internal returns (bool won, uint256 payout) {
         Bet storage bet = bets[betId];
-        require(bet.player == msg.sender, "Not your bet");
         require(bet.status == BetStatus.Pending, "Bet not pending");
 
         // Check blockhash availability
@@ -352,11 +352,10 @@ contract Clawdice is IClawdice, ReentrancyGuard, Ownable {
         require(tokensReceived >= minTokensOut, "Insufficient output");
     }
 
-    /// @notice Claim winnings from a winning bet
-    /// @param betId The bet ID to claim
+    /// @notice Reveal/claim a bet - anyone can call, payout goes to original bettor
+    /// @param betId The bet ID to reveal
     function claim(uint256 betId) external nonReentrant {
         Bet storage bet = bets[betId];
-        require(bet.player == msg.sender, "Not your bet");
         require(bet.status == BetStatus.Pending, "Bet not pending");
 
         // Check blockhash availability
