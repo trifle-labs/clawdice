@@ -41,3 +41,11 @@ jq --arg network "$NETWORK" \
 
 echo "Updated deployments.json for $NETWORK:"
 jq ".${NETWORK}" deployments.json
+
+# Sync to frontend if it exists
+FRONTEND_PATH="../clawdice-frontend/src/lib/deployments.json"
+if [ -f "$FRONTEND_PATH" ]; then
+  cp deployments.json "$FRONTEND_PATH"
+  echo ""
+  echo "✅ Synced to frontend: $FRONTEND_PATH"
+fi
