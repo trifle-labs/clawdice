@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "./interfaces/IClawdice.sol";
 import "./interfaces/IUniswapV4.sol";
 import "./libraries/BetMath.sol";
@@ -264,11 +265,11 @@ contract Clawdice is IClawdice, ReentrancyGuard, Ownable, EIP712 {
         // Get the full EIP-712 digest
         bytes32 digest = _hashTypedDataV4(structHash);
 
-        // Recover signer from signature
-        address signer = ECDSA.recover(digest, signature);
-
-        // CRITICAL: Verify the signature is from the player (msg.sender)
-        require(signer == msg.sender, "Invalid signature");
+        // Verify signature - supports both EOA (ECDSA) and Smart Wallets (EIP-1271)
+        require(
+            SignatureChecker.isValidSignatureNow(msg.sender, digest, signature),
+            "Invalid signature"
+        );
 
         // Store session (overwrites any existing session for this player)
         sessions[msg.sender] =
