@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "./interfaces/IClawdice.sol";
 import "./interfaces/IUniswapV4.sol";
 import "./libraries/BetMath.sol";
@@ -21,7 +23,7 @@ interface IClawdiceVault {
 /// @notice Provably fair on-chain dice game with commit-reveal pattern
 /// @dev Uses future blockhash for randomness, Kelly Criterion for bet limits
 /// @dev Accepts any ERC20 token as collateral (designed for Clanker tokens on Uniswap V4)
-contract Clawdice is IClawdice, ReentrancyGuard, Ownable {
+contract Clawdice is IClawdice, ReentrancyGuard, Ownable, EIP712 {
     using BetMath for *;
     using KellyCriterion for *;
     using SafeERC20 for IERC20;
@@ -46,11 +48,37 @@ contract Clawdice is IClawdice, ReentrancyGuard, Ownable {
     uint256[] public pendingBetIds;
     mapping(uint256 => uint256) public pendingBetIndex; // betId -> index in pendingBetIds + 1 (0 means not in queue)
 
+    // ============ Session Key Management ============
+    // Allows players to authorize ephemeral keys to place bets on their behalf
+    // SECURITY: Bets placed via session key are ALWAYS attributed to the player, not the session key
+
+    struct Session {
+        address sessionKey; // The ephemeral key authorized to place bets
+        uint256 expiresAt; // Unix timestamp when session expires
+        uint256 maxBetAmount; // Maximum bet size per individual bet
+        bool active; // Whether session is currently active
+    }
+
+    mapping(address => Session) public sessions; // player -> session
+    mapping(address => uint256) public sessionNonces; // player -> nonce (prevents replay)
+
+    // EIP-712 typehash for session creation
+    bytes32 public constant SESSION_TYPEHASH =
+        keccak256("CreateSession(address player,address sessionKey,uint256 expiresAt,uint256 maxBetAmount,uint256 nonce)");
+
     event PoolKeyUpdated(PoolKey oldKey, PoolKey newKey);
     event SwapExecuted(address indexed user, uint256 ethIn, uint256 tokensOut);
 
+    // Session events
+    event SessionCreated(address indexed player, address indexed sessionKey, uint256 expiresAt, uint256 maxBetAmount);
+    event SessionRevoked(address indexed player);
+    event BetPlacedViaSession(
+        uint256 indexed betId, address indexed player, address indexed sessionKey, uint128 amount, uint64 targetOddsE18
+    );
+
     constructor(address _vault, address _weth, address _universalRouter, address _permit2, PoolKey memory _poolKey)
         Ownable(msg.sender)
+        EIP712("Clawdice", "1")
     {
         require(_vault != address(0), "Invalid vault");
         vault = _vault;
@@ -209,6 +237,147 @@ contract Clawdice is IClawdice, ReentrancyGuard, Ownable {
         collateralToken.safeTransfer(msg.sender, tokensReceived);
 
         emit SwapExecuted(msg.sender, msg.value, tokensReceived);
+    }
+
+    // ============ Session Key Functions ============
+
+    /// @notice Create a session allowing an ephemeral key to place bets on player's behalf
+    /// @dev Player must sign EIP-712 typed data authorizing the session
+    /// @param sessionKey The ephemeral address authorized to place bets
+    /// @param expiresAt Unix timestamp when session expires (max 7 days from now)
+    /// @param maxBetAmount Maximum amount per individual bet
+    /// @param signature EIP-712 signature from the player
+    function createSession(address sessionKey, uint256 expiresAt, uint256 maxBetAmount, bytes calldata signature)
+        external
+    {
+        require(sessionKey != address(0), "Invalid session key");
+        require(sessionKey != msg.sender, "Session key cannot be player");
+        require(expiresAt > block.timestamp, "Already expired");
+        require(expiresAt <= block.timestamp + 7 days, "Max 7 day session");
+        require(maxBetAmount > 0, "Max bet must be positive");
+
+        // Build EIP-712 struct hash
+        bytes32 structHash = keccak256(
+            abi.encode(SESSION_TYPEHASH, msg.sender, sessionKey, expiresAt, maxBetAmount, sessionNonces[msg.sender]++)
+        );
+
+        // Get the full EIP-712 digest
+        bytes32 digest = _hashTypedDataV4(structHash);
+
+        // Recover signer from signature
+        address signer = ECDSA.recover(digest, signature);
+
+        // CRITICAL: Verify the signature is from the player (msg.sender)
+        require(signer == msg.sender, "Invalid signature");
+
+        // Store session (overwrites any existing session for this player)
+        sessions[msg.sender] =
+            Session({ sessionKey: sessionKey, expiresAt: expiresAt, maxBetAmount: maxBetAmount, active: true });
+
+        emit SessionCreated(msg.sender, sessionKey, expiresAt, maxBetAmount);
+    }
+
+    /// @notice Revoke your active session
+    /// @dev Only the player can revoke their own session
+    function revokeSession() external {
+        require(sessions[msg.sender].active, "No active session");
+        delete sessions[msg.sender];
+        emit SessionRevoked(msg.sender);
+    }
+
+    /// @notice Get session details for a player
+    /// @param player The player address
+    /// @return session The session details
+    function getSession(address player) external view returns (Session memory) {
+        return sessions[player];
+    }
+
+    /// @notice Check if a session is valid and active
+    /// @param player The player address
+    /// @param sessionKey The session key to verify
+    /// @return valid True if the session key is valid for this player
+    function isSessionValid(address player, address sessionKey) external view returns (bool valid) {
+        Session storage session = sessions[player];
+        return session.active && session.sessionKey == sessionKey && block.timestamp < session.expiresAt;
+    }
+
+    /// @notice Place a bet on behalf of a player using their authorized session key
+    /// @dev SECURITY: msg.sender must be the authorized session key for `player`
+    /// @dev SECURITY: Bet is attributed to `player`, NOT msg.sender
+    /// @dev SECURITY: Tokens are transferred from `player`'s balance (they must have approved)
+    /// @param player The player who authorized this session (bet owner)
+    /// @param amount Amount of tokens to bet (from player's balance)
+    /// @param targetOddsE18 Target win probability (18 decimals)
+    /// @return betId The ID of the placed bet
+    function placeBetWithSession(address player, uint256 amount, uint64 targetOddsE18)
+        external
+        nonReentrant
+        returns (uint256 betId)
+    {
+        // ============ CRITICAL SECURITY CHECKS ============
+
+        // 1. Verify caller is the authorized session key for this player
+        Session storage session = sessions[player];
+        require(session.active, "No active session");
+        require(session.sessionKey == msg.sender, "Caller is not authorized session key");
+        require(block.timestamp < session.expiresAt, "Session expired");
+
+        // 2. Verify bet amount is within session limits
+        require(amount > 0, "Bet cannot be zero");
+        require(amount <= session.maxBetAmount, "Exceeds session max bet");
+
+        // ============ STANDARD BET VALIDATION ============
+
+        // Auto-sweep expired bets
+        _sweepExpiredInternal(5);
+
+        // Validate odds
+        BetMath.validateOdds(targetOddsE18);
+
+        // Check against Kelly criterion max bet
+        uint256 bankroll = _getHouseBalance();
+        uint256 maxBet = KellyCriterion.calculateMaxBet(bankroll, targetOddsE18, houseEdgeE18);
+        require(amount <= maxBet, "Bet exceeds house max");
+
+        // ============ TOKEN TRANSFER ============
+
+        // CRITICAL: Transfer tokens from PLAYER's balance, not from session key!
+        // Player must have approved this contract for their tokens
+        collateralToken.safeTransferFrom(player, address(this), amount);
+
+        // ============ CREATE BET ============
+
+        betId = nextBetId++;
+
+        // CRITICAL: Bet is owned by PLAYER, not msg.sender (session key)!
+        bets[betId] = Bet({
+            player: player, // <-- PLAYER, not msg.sender!
+            amount: uint128(amount),
+            targetOddsE18: targetOddsE18,
+            blockNumber: uint64(block.number),
+            status: BetStatus.Pending
+        });
+
+        // Add to pending queue
+        pendingBetIds.push(betId);
+        pendingBetIndex[betId] = pendingBetIds.length;
+
+        // Emit events with PLAYER as the bettor (for indexing)
+        emit BetPlaced(betId, player, uint128(amount), targetOddsE18, uint64(block.number));
+        emit BetPlacedViaSession(betId, player, msg.sender, uint128(amount), targetOddsE18);
+    }
+
+    /// @notice Get the EIP-712 domain separator
+    /// @return The domain separator hash
+    function getDomainSeparator() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    /// @notice Get the next nonce for a player (for signing session creation)
+    /// @param player The player address
+    /// @return nonce The next nonce to use
+    function getSessionNonce(address player) external view returns (uint256) {
+        return sessionNonces[player];
     }
 
     /// @notice Place a new bet and claim a previous bet in one transaction
