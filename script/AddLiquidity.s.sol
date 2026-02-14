@@ -50,7 +50,7 @@ contract AddLiquidity is Script {
         // Tick range must be multiples of tickSpacing (60)
         IPoolModifyLiquidityTest.ModifyLiquidityParams memory params = IPoolModifyLiquidityTest.ModifyLiquidityParams({
             tickLower: -887220, // Near min, multiple of 60
-            tickUpper: 887220,  // Near max, multiple of 60
+            tickUpper: 887220, // Near max, multiple of 60
             liquidityDelta: int256(1e17), // 0.1 liquidity units - minimal
             salt: bytes32(0)
         });
